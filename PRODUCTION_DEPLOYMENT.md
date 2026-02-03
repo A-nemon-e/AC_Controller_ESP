@@ -258,7 +258,7 @@ vim /etc/apache2/sites-available/ac-iot.conf
 ```
 
 不开http的：
-```
+```apache
 <VirtualHost *:80>
     ServerName a.ifelsa.uk
     # 也可以填 ServerAlias www.a.ifelsa.uk
