@@ -1,0 +1,159 @@
+# ===== Node.js / NestJS Backend =====
+# 依赖
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 编译输出
+dist/
+build/
+*.js.map
+
+# 环境变量（包含敏感信息）
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 数据库文件（SQLite）
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# 日志
+logs/
+*.log
+/var/log/
+
+# 缓存
+.cache/
+.npm/
+.eslintcache
+.node_repl_history
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# TypeScript
+*.tsbuildinfo
+
+# ===== Arduino / ESP固件 =====
+# Arduino IDE
+*.hex
+*.eep
+*.elf
+*.map
+*.lss
+*.sym
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VSCode Arduino
+.vscode/arduino.json
+.vscode/c_cpp_properties.json
+
+# ===== 系统文件 =====
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ===== IDE & 编辑器 =====
+# VSCode
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ===== 临时文件 =====
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.old
+
+# ===== 生产构建产物 =====
+# PM2
+.pm2/
+
+# Nginx配置（服务器端生成）
+/etc/nginx/sites-enabled/
+
+# ===== 个人配置（不应提交）=====
+# 部署脚本中的敏感信息
+*_private.sh
+secrets.json
+
+# 本地开发配置
+local_dev.db
+test_*.js
+mock_*.js
+check_*.js
+verify_*.js
+
+# ===== Brain / AI辅助文件（可选）=====
+# Gemini AI工作目录（如果不想上传）
+# .gemini/
+
+# ===== 忽略特定文件 =====
+# 用户凭证
+*.pem
+*.key
+*.crt
+*.cert
+
+# 备份文件
+*.gz
+*.zip
+*.tar
+*.rar
+*.7z
+
+# ===== 保留示例文件 =====
+!.env.example
+!.env.production.example
+!ecosystem.config.js.example
+!README*.md
+!DEPLOY*.md
