@@ -58,14 +58,18 @@ apt install -y nginx
 ### 2. 部署后端
 
 ```bash
-# 假设代码已在服务器
 cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-server
-
-# 安装依赖
+# ========== 阶段1: 构建 ==========
+# 1. 完整安装（包括 @nestjs/cli）
+npm install
+# 2. 构建
+npm run build
+# ========== 阶段2: 清理 ==========
+# 3. 删除所有依赖
+rm -rf node_modules
+# 4. 只安装生产依赖
 npm install --production
 
-# 编译
-npm run build
 
 # 创建数据目录
 mkdir -p /opt/ac-iot-server/AC_Controller_ESP/data
@@ -73,7 +77,8 @@ mkdir -p /opt/ac-iot-server/AC_Controller_ESP/data
 # 配置环境变量
 cat > .env.production << 'EOF'
 DB_FILE=/opt/ac-iot-server/AC_Controller_ESP/data/ac_data.db
-MQTT_URL=mqtt://localhost:1883
+# 格式: mqtt://用户名:密码@主机:端口
+MQTT_URL=mqtt://admin:yourpassword@localhost:1883
 PORT=3000
 NODE_ENV=production
 JWT_SECRET=CHANGE_THIS_TO_RANDOM_STRING_IN_PRODUCTION
@@ -81,6 +86,10 @@ LOG_LEVEL=info
 EOF
 
 chmod 600 .env.production
+
+# （可选）构建后删除开发依赖以节省空间
+# rm -rf node_modules
+# npm install --production
 ```
 
 ### 3. 构建和部署前端
@@ -679,7 +688,7 @@ cp -r dist/* /var/www/ac-iot-frontend/
 # 更新后端
 cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-server
 git pull  # 或重新上传代码
-npm install --production
+npm install  # 完整安装（构建需要开发依赖）
 npm run build
 pm2 restart ac-iot-server
 ```
