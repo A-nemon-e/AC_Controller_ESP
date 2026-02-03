@@ -3,7 +3,7 @@ module.exports = {
         {
             name: 'ac-iot-server',
             script: './dist/main.js',
-            cwd: '/opt/ac-iot-server/ac-iot-server',
+            cwd: '/opt/ac-iot-server/AC_Controller_ESP/ac-iot-server',
 
             // 环境变量
             env: {
