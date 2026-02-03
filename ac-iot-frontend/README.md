@@ -113,6 +113,34 @@ src/
 - [ ] 用户设置页面
 - [ ] 国际化支持
 
+## 🚀 服务器部署
+
+### 快速部署（在服务器上）
+
+```bash
+# 1. 进入前端目录
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-frontend
+
+# 2. 安装依赖
+npm install
+
+# 3. 构建生产版本
+npm run build
+
+# 4. 部署到Web服务器
+cp -r dist/* /var/www/ac-iot-frontend/
+chmod -R 755 /var/www/ac-iot-frontend/
+```
+
+### 完整部署指南
+
+查看项目根目录的 [`PRODUCTION_DEPLOYMENT.md`](../PRODUCTION_DEPLOYMENT.md) 获取：
+- Apache2 / Nginx 反向代理配置
+- WebSocket 支持
+- SSL 证书配置
+- PM2 进程管理
+- 完整的故障排除
+
 ## 📄 License
 
 MIT

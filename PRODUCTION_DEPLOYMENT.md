@@ -94,7 +94,7 @@ cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-frontend
 # 安装依赖
 npm install
 
-# 构建生产版本
+# 构建生产版本（已优化，跳过类型检查）
 npm run build
 
 # 创建Web根目录
@@ -251,6 +251,97 @@ vim /etc/apache2/sites-available/ac-iot.conf
     RewriteRule /(.*) ws://localhost:3000/$1 [P,L]
 
     # HTTPS请求头
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Port "443"
+    RequestHeader set X-Real-IP %{REMOTE_ADDR}s
+</VirtualHost>
+```
+
+不开http的：
+```
+<VirtualHost *:80>
+    ServerName a.ifelsa.uk
+    # 也可以填 ServerAlias www.a.ifelsa.uk
+    ServerAdmin admin@a.ifelsa.uk
+
+    # -----------------------------------------------------------
+    # 停用 HTTP 业务逻辑，强制重定向到 HTTPS
+    # -----------------------------------------------------------
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # 这里的日志可以保留，用于排查重定向问题
+    ErrorLog ${APACHE_LOG_DIR}/ac-iot-error.log
+    CustomLog ${APACHE_LOG_DIR}/ac-iot-access.log combined
+</VirtualHost>
+
+# HTTPS配置
+<VirtualHost *:443>
+    ServerName a.ifelsa.uk
+    ServerAdmin admin@a.ifelsa.uk
+
+    # -----------------------------------------------------------
+    # SSL 证书配置 
+    # (⚠️注意：请确认这些文件真实存在，否则 Apache 无法启动)
+    # -----------------------------------------------------------
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/a.ifelsa.uk/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/a.ifelsa.uk/privkey.pem
+    # 旧版本 Apache 可能需要 SSLCertificateChainFile，新版 Let's Encrypt 不需要
+
+    # 日志
+    ErrorLog ${APACHE_LOG_DIR}/ac-iot-ssl-error.log
+    CustomLog ${APACHE_LOG_DIR}/ac-iot-ssl-access.log combined
+
+    # -----------------------------------------------------------
+    # 前端静态文件根目录
+    # -----------------------------------------------------------
+    DocumentRoot /var/www/ac-iot-frontend
+
+    <Directory /var/www/ac-iot-frontend>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+        
+        # Vue Router HTML5 History模式支持
+        <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /index.html [L]
+        </IfModule>
+    </Directory>
+
+    # 静态资源缓存
+    <FilesMatch "\.(js|css|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$">
+        Header set Cache-Control "max-age=31536000, public"
+    </FilesMatch>
+
+    # -----------------------------------------------------------
+    # 后端 API 代理配置
+    # -----------------------------------------------------------
+    ProxyPreserveHost On
+    ProxyRequests Off
+    
+    # 后端API代理 (所有/api/*请求)
+    ProxyPass /api http://localhost:3000
+    ProxyPassReverse /api http://localhost:3000
+
+    # WebSocket支持 (Socket.io)
+    ProxyPass /socket.io/ http://localhost:3000/socket.io/
+    ProxyPassReverse /socket.io/ http://localhost:3000/socket.io/
+    
+    # WebSocket升级逻辑
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /(.*) ws://localhost:3000/$1 [P,L]
+
+    # -----------------------------------------------------------
+    # HTTPS 专用请求头
+    # -----------------------------------------------------------
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Port "443"
     RequestHeader set X-Real-IP %{REMOTE_ADDR}s
