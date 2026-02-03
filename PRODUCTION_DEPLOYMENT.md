@@ -68,11 +68,11 @@ npm install --production
 npm run build
 
 # 创建数据目录
-mkdir -p /opt/ac-iot/data
+mkdir -p /opt/ac-iot-server/AC_Controller_ESP/data
 
 # 配置环境变量
 cat > .env.production << 'EOF'
-DB_FILE=/opt/ac-iot/data/ac_data.db
+DB_FILE=/opt/ac-iot-server/AC_Controller_ESP/data/ac_data.db
 MQTT_URL=mqtt://localhost:1883
 PORT=3000
 NODE_ENV=production
