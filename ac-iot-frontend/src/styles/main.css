@@ -1,0 +1,11 @@
+/* 全局样式 */
+:root {
+  /* Vant自定义主题 */
+  --van-primary-color: #1890ff;
+  --van-text-color: #323233;
+  --van-border-radius-md: 8px;
+}
+
+body {
+  background: #f7f8fa;
+}

@@ -290,19 +290,144 @@ ufw enable
 
 ---
 
-## 🔒 配置反向代理(Nginx)
+## 🔒 配置反向代理 (Apache2 或 Nginx)
 
-### 为什么需要Nginx?
+### 为什么需要反向代理?
 
-1. **HTTPS支持**: 自动SSL证书
-2. **负载均衡**: 多实例部署
-3. **静态文件服务**: 前端页面
-4. **安全防护**: 隐藏内部端口
+1. **HTTPS支持**: 在反向代理层处理SSL证书（**后端不需要SSL**）
+2. **隐藏内部端口**: 用户访问80/443，内部转发到3000
+3. **负载均衡**: 多实例部署时分发请求
+4. **静态文件服务**: 部署前端页面
+5. **安全防护**: 防火墙、限流等
 
-### 配置Nginx
+**重要**：SSL证书是配置在**反向代理**上的，后端只需HTTP监听3000端口！
+
+```
+用户浏览器 →  HTTPS (443) → Apache2/Nginx (SSL终止)
+                               ↓  HTTP (3000)
+                            NestJS后端 (内网，不需要SSL)
+```
+
+---
+
+### 选项A: 使用Apache2 (推荐Apache用户)
+
+#### 1. 安装Apache2
 
 ```bash
-# 创建站点配置
+apt install -y apache2
+
+# 启用必需模块
+a2enmod proxy
+a2enmod proxy_http
+a2enmod proxy_wstunnel  # WebSocket支持
+a2enmod rewrite
+a2enmod headers
+a2enmod ssl  # HTTPS支持
+
+# 重启Apache
+systemctl restart apache2
+```
+
+#### 2. 创建站点配置
+
+```bash
+# 创建配置文件
+vim /etc/apache2/sites-available/ac-iot-server.conf
+```
+
+添加以下内容：
+
+```apache
+<VirtualHost *:80>
+    ServerName your-domain.com  # ⚠️ 替换为你的域名或IP
+    ServerAdmin admin@your-domain.com
+
+    # 日志
+    ErrorLog ${APACHE_LOG_DIR}/ac-iot-error.log
+    CustomLog ${APACHE_LOG_DIR}/ac-iot-access.log combined
+
+    # 代理配置
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # API代理
+    ProxyPass / http://localhost:3000/
+    ProxyPassReverse / http://localhost:3000/
+
+    # WebSocket支持
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /(.*)           ws://localhost:3000/$1 [P,L]
+    
+    # Socket.io支持
+    ProxyPass /socket.io/ http://localhost:3000/socket.io/
+    ProxyPassReverse /socket.io/ http://localhost:3000/socket.io/
+
+    # 请求头
+    RequestHeader set X-Forwarded-Proto "http"
+    RequestHeader set X-Forwarded-Port "80"
+</VirtualHost>
+
+# HTTPS配置 (如果需要SSL)
+# <VirtualHost *:443>
+#     ServerName your-domain.com
+#     
+#     SSLEngine on
+#     SSLCertificateFile /etc/ssl/certs/your-cert.crt
+#     SSLCertificateKeyFile /etc/ssl/private/your-key.key
+#     
+#     # 其他配置同上...
+#     ProxyPass / http://localhost:3000/
+#     ProxyPassReverse / http://localhost:3000/
+# </VirtualHost>
+```
+
+#### 3. 启用站点
+
+```bash
+# 禁用默认站点
+a2dissite 000-default.conf
+
+# 启用新站点
+a2ensite ac-iot-server.conf
+
+# 测试配置
+apache2ctl configtest
+
+# 重载Apache
+systemctl reload apache2
+```
+
+#### 4. 配置Let's Encrypt (免费SSL证书，可选)
+
+```bash
+# 安装Certbot
+apt install -y certbot python3-certbot-apache
+
+# 自动配置SSL
+certbot --apache -d your-domain.com
+
+# 自动续期测试
+certbot renew --dry-run
+```
+
+---
+
+### 选项B: 使用Nginx (另一种选择)
+
+#### 1. 安装Nginx
+
+```bash
+apt install -y nginx
+
+systemctl enable nginx
+systemctl start nginx
+```
+
+#### 2. 创建站点配置
+
+```bash
 vim /etc/nginx/sites-available/ac-iot-server
 ```
 
@@ -315,8 +440,8 @@ server {
     server_name your-domain.com;  # ⚠️ 替换为你的域名或IP
 
     # API代理
-    location /api/ {
-        proxy_pass http://localhost:3000/;
+    location / {
+        proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         
         # WebSocket支持
@@ -336,7 +461,7 @@ server {
         proxy_read_timeout 60s;
     }
     
-    # Socket.io WebSocket (如果需要)
+    # Socket.io WebSocket
     location /socket.io/ {
         proxy_pass http://localhost:3000/socket.io/;
         proxy_http_version 1.1;
@@ -350,9 +475,20 @@ server {
         access_log off;
     }
 }
+
+# HTTPS配置 (如果需要SSL)
+# server {
+#     listen 443 ssl;
+#     server_name your-domain.com;
+#     
+#     ssl_certificate /etc/ssl/certs/your-cert.crt;
+#     ssl_certificate_key /etc/ssl/private/your-key.key;
+#     
+#     # 其他配置同上...
+# }
 ```
 
-### 启用站点
+#### 3. 启用站点
 
 ```bash
 # 创建软链接
@@ -364,6 +500,84 @@ nginx -t
 # 重载Nginx
 systemctl reload nginx
 ```
+
+#### 4. 配置Let's Encrypt (免费SSL证书，可选)
+
+```bash
+# 安装Certbot
+apt install -y certbot python3-certbot-nginx
+
+# 自动配置SSL
+certbot --nginx -d your-domain.com
+
+# 自动续期
+certbot renew --dry-run
+```
+
+---
+
+### 🔐 关于SSL证书的详细说明
+
+#### SSL证书的作用
+
+| 作用 | 说明 |
+|------|------|
+| **加密传输** | 防止中间人窃听数据 |
+| **身份验证** | 证明网站是你的，不是钓鱼网站 |
+| **SEO优化** | Google优先展示HTTPS网站 |
+| **浏览器信任** | 避免浏览器"不安全"警告 |
+
+#### SSL证书在哪里配置？
+
+```
+用户 → HTTPS (Apache2/Nginx配置SSL) → HTTP (后端无需SSL)
+```
+
+- ✅ **Apache2/Nginx**: 配置SSL证书
+- ❌ **NestJS后端**: 不需要SSL配置
+
+#### 获取SSL证书的方式
+
+**方式1: Let's Encrypt (免费，推荐)**
+
+```bash
+# Apache2
+certbot --apache -d your-domain.com
+
+# Nginx
+certbot --nginx -d your-domain.com
+```
+
+**方式2: 购买商业证书**
+
+从SSL证书提供商购买，然后配置：
+
+```apache
+# Apache2
+SSLCertificateFile /path/to/cert.crt
+SSLCertificateKeyFile /path/to/key.key
+
+# Nginx
+ssl_certificate /path/to/cert.crt;
+ssl_certificate_key /path/to/key.key;
+```
+
+**方式3: 自签名证书 (仅测试)**
+
+```bash
+# 生成自签名证书
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/selfsigned.key \
+  -out /etc/ssl/certs/selfsigned.crt
+```
+
+#### 内网部署不需要SSL
+
+如果只在内网使用（没有公网域名），可以：
+
+1. **不配置SSL**，只用HTTP (80端口)
+2. **使用IP地址访问**: `http://192.168.1.100`
+3. **后端正常监听3000**，反向代理转发即可
 
 ---
 

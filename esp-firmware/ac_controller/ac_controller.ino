@@ -28,7 +28,6 @@
 #include "wifi_manager.h"
 #include <ArduinoJson.h> // ✅ 新增：JSON库
 
-
 // ===== 全局变量定义 =====
 // 定时器配置（可通过MQTT动态修改）
 uint32_t sensorInterval = DEFAULT_SENSOR_INTERVAL;
@@ -43,6 +42,7 @@ void handleControlCommand(const char *json);
 void handleLearnCommand(const char *json);
 void handleAutoDetectCommand(const char *json); // ✅ 新增
 void printSystemInfo();
+void publishDeviceAnnounce(); // ✅ 设备上线消息
 
 // ===== 初始化 =====
 void setup() {
@@ -110,6 +110,9 @@ void setup() {
 
   // 11. 打印系统信息
   printSystemInfo();
+
+  // 12. 发送设备上线消息（用于设备发现）
+  publishDeviceAnnounce();
 
   DEBUG_PRINTLN();
   DEBUG_PRINTLN("========================================");
@@ -402,5 +405,39 @@ void handleAutoDetectCommand(const char *json) {
     MQTTClient::publish(topic.c_str(), payload);
 
     DEBUG_PRINTLN("[自动检测] ⏹ 已停止");
+  }
+}
+
+// ===== 发送设备上线消息（用于设备发现）=====
+void publishDeviceAnnounce() {
+  DeviceConfig &cfg = ConfigManager::getConfig();
+
+  // 只有未绑定设备才发送发现消息（userId == 0）
+  if (cfg.userId == 0) {
+    DEBUG_PRINTLN("[设备发现] 发送上线消息...");
+
+    // 构建JSON消息
+    StaticJsonDocument<256> doc;
+    doc["uuid"] = cfg.deviceUUID;
+    doc["mac"] = WiFi.macAddress();
+    doc["ip"] = WiFi.localIP().toString();
+    doc["userId"] = cfg.userId;
+    doc["brand"] = cfg.brand;
+    doc["model"] = cfg.model;
+    doc["timestamp"] = millis();
+
+    char payload[256];
+    serializeJson(doc, payload);
+
+    // 发布到 ac/discovery/<UUID>
+    String topic = "ac/discovery/" + String(cfg.deviceUUID);
+    MQTTClient::publish(topic.c_str(), payload);
+
+    DEBUG_PRINTLN("[设备发现] ✅ 上线消息已发送");
+    DEBUG_PRINTF("[设备发现] Topic: %s\n", topic.c_str());
+    DEBUG_PRINTF("[设备发现] Payload: %s\n", payload);
+  } else {
+    DEBUG_PRINTF("[设备发现] 设备已绑定（用户ID: %u），跳过发现消息\n",
+                 cfg.userId);
   }
 }

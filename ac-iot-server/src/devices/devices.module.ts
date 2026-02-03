@@ -8,6 +8,7 @@ import { AuditLog } from './audit-log.entity';
 import { SensorReading } from './sensor-reading.entity';
 import { DevicesGateway } from './devices.gateway';
 import { LearnService } from './learn.service';
+import { DeviceDiscoveryService } from './device-discovery.service';
 
 @Module({
     imports: [
@@ -15,7 +16,8 @@ import { LearnService } from './learn.service';
         MqttModule,
     ],
     controllers: [DevicesController],
-    providers: [DevicesService, LearnService, DevicesGateway],
-    exports: [DevicesService, LearnService],
+    providers: [DevicesService, LearnService, DevicesGateway, DeviceDiscoveryService],
+    exports: [DevicesService, LearnService, DeviceDiscoveryService],
 })
 export class DevicesModule { }
+

@@ -6,6 +6,7 @@ import { UpdateDeviceConfigDto } from './dto/update-device-config.dto';
 import { SetupBrandDto, SetupLearnAllDto } from './dto/setup.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LearnService } from './learn.service';
+import { DeviceDiscoveryService } from './device-discovery.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('devices')
@@ -13,6 +14,7 @@ export class DevicesController {
     constructor(
         private readonly devicesService: DevicesService,
         private readonly learnService: LearnService,
+        private readonly deviceDiscoveryService: DeviceDiscoveryService,
     ) { }
 
     @Post()
@@ -224,5 +226,32 @@ export class DevicesController {
         }
 
         return this.devicesService.getAutoDetectStatus(id);
+    }
+
+    // ===== 设备发现 API =====
+
+    /**
+     * 获取所有可发现的未绑定设备
+     * @param maxAge 设备最大离线时间（分钟），默认5分钟
+     */
+    @Get('discovery/available')
+    async getAvailableDevices(@Query('maxAge') maxAge?: string) {
+        const maxAgeMinutes = maxAge ? parseInt(maxAge) : 5;
+        return {
+            devices: this.deviceDiscoveryService.getAvailableDevices(maxAgeMinutes),
+            count: this.deviceDiscoveryService.getDiscoveredDeviceCount(),
+        };
+    }
+
+    /**
+     * 手动清理离线设备
+     */
+    @Post('discovery/cleanup')
+    cleanupOfflineDevices() {
+        const count = this.deviceDiscoveryService.cleanupOfflineDevices(10);
+        return {
+            message: `已清理 ${count} 个离线设备`,
+            cleanedCount: count,
+        };
     }
 }
