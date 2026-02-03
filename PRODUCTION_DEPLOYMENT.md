@@ -58,14 +58,8 @@ apt install -y nginx
 ### 2. 部署后端
 
 ```bash
-# 创建目录
-mkdir -p /opt/ac-iot
-cd /opt/ac-iot
-
-# 上传后端代码 (使用scp或git clone)
-# 假设代码已在 /opt/ac-iot/ac-iot-server
-
-cd /opt/ac-iot/ac-iot-server
+# 假设代码已在服务器
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-server
 
 # 安装依赖
 npm install --production
@@ -89,11 +83,13 @@ EOF
 chmod 600 .env.production
 ```
 
-### 3. 构建前端
+### 3. 构建和部署前端
+
+**方式A: 服务器端构建（推荐）**
 
 ```bash
-# 在本地Windows电脑执行
-cd C:\Users\xc\OneDrive\文档\AC_Controller_ESP\ac-iot-frontend
+# 在服务器上执行
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-frontend
 
 # 安装依赖
 npm install
@@ -101,19 +97,26 @@ npm install
 # 构建生产版本
 npm run build
 
-# dist目录就是构建产物
-```
-
-### 4. 上传前端到服务器
-
-```bash
-# 在服务器创建前端目录
+# 创建Web根目录
 mkdir -p /var/www/ac-iot-frontend
 
-# 在Windows本地上传 (使用scp或FTP)
-scp -r C:\Users\xc\OneDrive\文档\AC_Controller_ESP\ac-iot-frontend\dist\* root@your-server-ip:/var/www/ac-iot-frontend/
+# 复制构建产物
+cp -r dist/* /var/www/ac-iot-frontend/
 
-# 或者使用FileZilla等FTP工具上传 dist/* 到 /var/www/ac-iot-frontend/
+# 设置权限
+chmod -R 755 /var/www/ac-iot-frontend/
+```
+
+**方式B: 本地Windows构建后上传**
+
+```bash
+# 在本地Windows电脑执行
+cd C:\Users\xc\OneDrive\文档\AC_Controller_ESP\ac-iot-frontend
+npm install
+npm run build
+
+# 上传到服务器
+scp -r dist/* root@your-server-ip:/var/www/ac-iot-frontend/
 ```
 
 ---
@@ -491,7 +494,7 @@ certbot renew --dry-run
 
 ```bash
 # 在前端项目根目录
-cd /path/to/ac-iot-frontend
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-frontend
 
 # 创建 .env.production
 cat > .env.production << 'EOF'
@@ -517,7 +520,7 @@ systemctl start mosquitto
 systemctl enable mosquitto
 
 # 2. 启动后端 (使用PM2)
-cd /opt/ac-iot/ac-iot-server
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-server
 pm2 start ecosystem.config.js
 pm2 save
 pm2 startup systemd
@@ -575,13 +578,15 @@ tail -f /var/log/apache2/ac-iot-access.log
 # Nginx
 tail -f /var/log/nginx/ac-iot-access.log
 
-# 更新前端
-# 1. 本地重新构建: npm run build
-# 2. 上传dist/*到服务器: /var/www/ac-iot-frontend/
-# 3. 无需重启，刷新浏览器即可
+# 更新前端（服务器端构建）
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-frontend
+git pull  # 如果使用git
+npm run build
+cp -r dist/* /var/www/ac-iot-frontend/
+# 无需重启，刷新浏览器即可
 
 # 更新后端
-cd /opt/ac-iot/ac-iot-server
+cd /opt/ac-iot-server/AC_Controller_ESP/ac-iot-server
 git pull  # 或重新上传代码
 npm install --production
 npm run build
