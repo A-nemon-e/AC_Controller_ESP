@@ -84,6 +84,15 @@ export class DevicesService {
         if (device.userId !== userId) {
             throw new ForbiddenException('Not your device');
         }
+
+        // ✅ 发送解绑命令 (重置 userId 为 0)
+        // 这样设备会收到配置并更新 EEPROM，然后重启或重发 Discovery
+        const topic = `ac/user_${userId}/dev_${device.uuid}/config/update`;
+        const payload = JSON.stringify({ userId: 0, deviceId: 0 });
+
+        this.mqttService.publish(topic, payload);
+        this.logger.log(`Unbinding device ${device.uuid}: sent config reset to ${topic}`);
+
         await this.devicesRepository.delete(id);
     }
 

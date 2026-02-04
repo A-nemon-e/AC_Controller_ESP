@@ -89,6 +89,10 @@ bool ConfigManager::save() {
 
   // 写入EEPROM
   EEPROM.put(EEPROM_CONFIG_ADDR, config);
+
+  // ✅ 关键修复：同步保存 userId 到独立槽位，防止 load() 时被旧数据覆盖
+  EEPROM.put(EEPROM_USER_ID, config.userId);
+
   EEPROM.commit();
 
   DEBUG_PRINTLN("[配置] ✅ 配置已保存");
@@ -210,6 +214,13 @@ bool ConfigManager::updateFromJSON(const char *json) {
     config.model = doc["model"];
     changed = true;
     DEBUG_PRINTF("[配置] 更新型号: %d\n", config.model);
+  }
+
+  // ✅ 新增：支持 deviceId 更新
+  if (doc.containsKey("deviceId")) {
+    uint32_t newId = doc["deviceId"];
+    saveDeviceId(newId); // 直接保存到独立槽位
+    DEBUG_PRINTF("[配置] 更新deviceId: %u\n", newId);
   }
 
   if (changed) {
