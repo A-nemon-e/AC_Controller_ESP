@@ -34,9 +34,11 @@ bool ConfigManager::load() {
   uint32_t deviceId;
   EEPROM.get(EEPROM_DEVICE_ID, deviceId);
 
-  // 检查是否是未初始化的EEPROM（0xFFFFFFFF）
-  if (config.userId == 0xFFFFFFFF)
+  // 检查是否是未初始化的EEPROM（0xFFFFFFFF）或异常大的值（可能是残留数据）
+  if (config.userId == 0xFFFFFFFF || config.userId > 1000000) {
+    DEBUG_PRINTLN("[配置] userId无效或未初始化，强制重置为0");
     config.userId = 0;
+  }
 
   DEBUG_PRINTF("[配置] 加载userId: %u\n", config.userId);
 
@@ -129,6 +131,10 @@ void ConfigManager::resetToDefault() {
 
   // 计算校验和
   config.checksum = calculateChecksum();
+
+  // ✅ 关键修复：同时清除单独存储的userId和deviceId
+  EEPROM.put(EEPROM_USER_ID, (uint32_t)0);
+  EEPROM.put(EEPROM_DEVICE_ID, (uint32_t)0);
 }
 
 bool ConfigManager::updateFromJSON(const char *json) {

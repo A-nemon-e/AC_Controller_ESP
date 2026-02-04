@@ -136,12 +136,17 @@ const onAddDevice = async () => {
   adding.value = true
   try {
     const device = await devicesApi.create(newDevice.value)
-    devicesStore.addDevice(device)
-    showToast('添加成功')
-    showAddDevice.value = false
-    newDevice.value = { uuid: '', name: '' }
-  } catch (error) {
-    showToast('添加失败')
+    if (device) {
+      devicesStore.addDevice(device)
+      showToast('添加成功')
+      showAddDevice.value = false
+      newDevice.value = { uuid: '', name: '' }
+    } else {
+      throw new Error('API returned invalid device data')
+    }
+  } catch (error: any) {
+    console.error('Add device failed:', error)
+    showToast(error.message || '添加失败')
   } finally {
     adding.value = false
   }
@@ -151,13 +156,18 @@ const refreshDiscovery = async () => {
   discovering.value = true
   try {
     const result = await devicesApi.getDiscoveredDevices()
-    discoveredDevices.value = result.devices
-    if (result.count === 0) {
+    // 确保 devices 是数组
+    const devices = (result && Array.isArray(result.devices)) ? result.devices : []
+    discoveredDevices.value = devices
+    
+    if (devices.length === 0) {
       showToast('未发现可用设备')
     } else {
-      showToast(`发现 ${result.count} 个设备`)
+      showToast(`发现 ${devices.length} 个设备`)
     }
   } catch (error) {
+    console.error('Discovery failed:', error)
+    discoveredDevices.value = [] // 出错时重置为空数组
     showToast('扫描失败')
   } finally {
     discovering.value = false
@@ -171,12 +181,17 @@ const addDiscoveredDevice = async (device: DiscoveredDevice) => {
   adding.value = true
   try {
     const newDev = await devicesApi.create({ uuid: device.uuid, name })
-    devicesStore.addDevice(newDev)
-    showToast('添加成功')
-    showDiscovery.value = false
-    await devicesStore.fetchDevices()
-  } catch (error) {
-    showToast('添加失败')
+    if (newDev) {
+      devicesStore.addDevice(newDev)
+      showToast('添加成功')
+      showDiscovery.value = false
+      await devicesStore.fetchDevices()
+    } else {
+       throw new Error('API returned invalid device data')
+    }
+  } catch (error: any) {
+    console.error('Add discovered device failed:', error)
+    showToast(error.message || '添加失败')
   } finally {
     adding.value = false
   }
