@@ -44,6 +44,13 @@ export class DevicesService {
         return this.devicesRepository.findOne({ where: { id } });
     }
 
+    async findOne(userId: number, id: number): Promise<Device> {
+        const device = await this.devicesRepository.findOne({ where: { id } });
+        if (!device) throw new NotFoundException('Device not found');
+        if (device.userId !== userId) throw new ForbiddenException('Access denied');
+        return device;
+    }
+
     async remove(userId: number, id: number): Promise<void> {
         const device = await this.devicesRepository.findOne({ where: { id } });
         if (!device) {

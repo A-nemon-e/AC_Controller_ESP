@@ -42,6 +42,11 @@ export class DevicesController {
         };
     }
 
+    @Get(':id')
+    findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+        return this.devicesService.findOne(req.user.userId, id);
+    }
+
     @Delete(':id')
     remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
         return this.devicesService.remove(req.user.userId, id);
