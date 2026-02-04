@@ -6,7 +6,7 @@
       </van-button>
     </div>
 
-    <van-empty v-if="routines.length === 0" description="暂无自动化规则" />
+    <van-empty v-if="!routines || routines.length === 0" description="暂无自动化规则" />
 
     <van-cell-group
       v-else
@@ -25,7 +25,7 @@
         </template>
       </van-cell>
       <van-cell title="逻辑" :value="routine.logic === 'AND' ? '全部满足' : '任一满足'" />
-      <van-cell title="触发器" :value="`${routine.triggers.length} 个条件`" />
+      <van-cell title="触发器" :value="`${routine.triggers?.length || 0} 个条件`" />
       <van-cell title="动作" :value="actionText(routine.action)" />
       <van-cell
         v-if="routine.lastTriggered"
@@ -253,6 +253,7 @@ const formatDate = (date: string) => {
 }
 
 const actionText = (action: any) => {
+  if (!action) return '--'
   if (!action.power) return '关机'
   return `开机 → ${action.mode === 'cool' ? '制冷' : '制热'} ${action.temp}°C`
 }
@@ -282,9 +283,14 @@ const triggerText = (trigger: Trigger) => {
 
 const fetchRoutines = async () => {
   try {
-    routines.value = await routinesApi.getAll()
+    const result = await routinesApi.getAll()
+    // 过滤掉无效的自动化规则
+    routines.value = Array.isArray(result) 
+      ? result.filter(r => r && r.id) 
+      : []
   } catch (error) {
     showToast('加载失败')
+    routines.value = []
   }
 }
 
@@ -301,11 +307,15 @@ const toggleRoutine = async (routine: Routine) => {
 const editRoutine = (routine: Routine) => {
   editingId.value = routine.id
   formData.value = {
-    name: routine.name,
-    deviceId: routine.deviceId,
-    logic: routine.logic,
-    triggers: [...routine.triggers],
-    action: { ...routine.action },
+    name: routine.name || '',
+    deviceId: routine.deviceId || 0,
+    logic: routine.logic || 'AND',
+    triggers: routine.triggers ? [...routine.triggers] : [],
+    action: routine.action ? { ...routine.action } : {
+      power: false,
+      mode: 'cool',
+      temp: 26,
+    },
   }
   showCreate.value = true
 }

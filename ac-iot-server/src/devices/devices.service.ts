@@ -28,7 +28,12 @@ export class DevicesService {
             ...createDeviceDto,
             userId,
         });
-        return this.devicesRepository.save(device);
+        const saved = await this.devicesRepository.save(device);
+
+        // ✅ 新增：推送配置到ESP，完成设备绑定
+        await this.pushDeviceConfig(saved);
+
+        return saved;
     }
 
     async findAll(userId: number): Promise<Device[]> {
@@ -311,5 +316,34 @@ export class DevicesService {
             status: 'idle',  // 默认空闲状态
             note: '实际状态请通过WebSocket订阅'
         };
+    }
+
+    /**
+     * ✅ 新增：推送设备配置到MQTT (用于设备绑定)
+     * 发送到: ac/user_0/dev_{uuid}/config/update 确保未绑定设备能收到
+     */
+    private async pushDeviceConfig(device: Device) {
+        // 注意：这里我们特意发送到 user_0 的topic，因为未绑定的设备监听的是这个
+        // 如果设备已经绑定过（比如改绑），它可能监听的是旧用户的topic
+        // 为了稳健性，我们可以同时发送到 user_0 和 user_{current} (如果未来支持)
+
+        // 策略：发送到 user_0 (针对新设备)
+        const topicUnbound = `ac/user_0/dev_${device.uuid}/config/update`;
+
+        const payload = {
+            userId: device.userId,
+            deviceId: device.id,
+            timestamp: Date.now(),
+        };
+
+        const payloadStr = JSON.stringify(payload);
+
+        // 发送给未绑定状态的Topic
+        this.mqttService.publish(topicUnbound, payloadStr);
+        this.logger.log(`Pushed bind config to ${topicUnbound}: ${payloadStr}`);
+
+        // 也可以尝试发送到当前用户的Topic (如果设备已经部分配置过)
+        // const topicBound = `ac/user_${device.userId}/dev_${device.uuid}/config/update`;
+        // this.mqttService.publish(topicBound, payloadStr);
     }
 }

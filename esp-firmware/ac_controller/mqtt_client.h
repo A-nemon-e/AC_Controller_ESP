@@ -15,7 +15,6 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
-
 class MQTTClient {
 public:
   // 初始化并连接MQTT
@@ -40,11 +39,19 @@ public:
   // 生成topic（辅助函数）
   static String getTopic(const char *suffix);
 
+  // ✅ 新增：重新订阅topic（用于绑定后更新）
+  static void resubscribe();
+
 private:
   static WiFiClient wifiClient;
   static PubSubClient mqttClient;
   static bool connected;
   static unsigned long lastReconnectAttempt;
+
+  // 故障回退机制
+  static uint8_t eepromFailCount;           // EEPROM 配置连接失败次数
+  static bool useDefaultCredentials;        // 是否使用默认凭证
+  static const uint8_t MAX_EEPROM_FAIL = 5; // 最多尝试 5 次后回退
 
   // MQTT消息回调（内部）
   static void messageCallback(char *topic, uint8_t *payload,

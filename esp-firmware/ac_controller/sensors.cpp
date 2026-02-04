@@ -7,7 +7,6 @@
 #include "mqtt_client.h"
 #include <ArduinoJson.h>
 
-
 // 静态成员初始化
 Adafruit_AHTX0 Sensors::aht;
 float Sensors::temperature = 0.0;
@@ -114,6 +113,9 @@ float Sensors::readCurrent() {
 
   float adcValue = adcSum / (float)ADC_SAMPLES;
 
+  // ✅ 打印ADC原始值（用于调试和参数调整）
+  DEBUG_PRINTF("[传感器] ADC原始值: %.2f (范围0-1023)\n", adcValue);
+
   // 转换为电流值
   // 公式：I = (ADC * 3.3 / 1024 - offset) * ratio
   float voltage = (adcValue * 3.3) / 1024.0;
@@ -123,6 +125,10 @@ float Sensors::readCurrent() {
   // 限制范围（避免负值）
   if (currentValue < 0)
     currentValue = 0;
+
+  // ✅ 打印计算后的电流值和中间电压
+  DEBUG_PRINTF("[传感器] 计算电流: %.3fA (电压: %.3fV, 偏移: %.3fV)\n",
+               currentValue, voltage, offsetVoltage);
 
   return currentValue;
 }

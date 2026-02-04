@@ -11,13 +11,16 @@ export const useDevicesStore = defineStore('devices', () => {
     const fetchDevices = async () => {
         loading.value = true
         try {
-            devices.value = await devicesApi.getAll()
+            const result = await devicesApi.getAll()
+            // 确保结果是数组
+            devices.value = Array.isArray(result) ? result : []
             // 自动选择第一个设备
             if (devices.value.length > 0 && !currentDevice.value) {
                 currentDevice.value = devices.value[0]
             }
         } catch (error) {
             console.error('Failed to fetch devices:', error)
+            devices.value = [] // 出错时设为空数组
         } finally {
             loading.value = false
         }
@@ -42,6 +45,19 @@ export const useDevicesStore = defineStore('devices', () => {
         devices.value.push(device)
     }
 
+    // ✅ 新增：获取单个设备的最新状态（用于轮询刷新）
+    const fetchDeviceStatus = async (deviceId: number) => {
+        try {
+            const device = await devicesApi.getById(deviceId)
+            // 更新设备状态
+            if (device && device.lastState) {
+                updateDeviceStatus(deviceId, device.lastState)
+            }
+        } catch (error) {
+            console.error('Failed to fetch device status:', error)
+        }
+    }
+
     const removeDevice = (deviceId: number) => {
         const index = devices.value.findIndex((d) => d.id === deviceId)
         if (index !== -1) {
@@ -57,6 +73,7 @@ export const useDevicesStore = defineStore('devices', () => {
         currentDevice,
         loading,
         fetchDevices,
+        fetchDeviceStatus,
         setCurrentDevice,
         updateDeviceStatus,
         addDevice,

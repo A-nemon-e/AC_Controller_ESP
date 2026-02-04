@@ -8,6 +8,7 @@ export enum AuditAction {
     SYNC_IR = 'SYNC_IR',       // IR Remote Sync
     EVENT_GHOST = 'EVENT_GHOST', // Ghost Operation
     LEARN = 'LEARN',           // IR Learning
+    IR_UNKNOWN = 'IR_UNKNOWN', // ✅ Unknown IR Signal
 }
 
 @Entity()

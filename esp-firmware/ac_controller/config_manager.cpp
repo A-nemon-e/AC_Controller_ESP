@@ -29,9 +29,48 @@ bool ConfigManager::load() {
   // 读取配置结构体
   EEPROM.get(EEPROM_CONFIG_ADDR, config);
 
+  // ✅ 新增：加载userId和deviceId
+  EEPROM.get(EEPROM_USER_ID, config.userId);
+  uint32_t deviceId;
+  EEPROM.get(EEPROM_DEVICE_ID, deviceId);
+
+  // 检查是否是未初始化的EEPROM（0xFFFFFFFF）
+  if (config.userId == 0xFFFFFFFF)
+    config.userId = 0;
+
+  DEBUG_PRINTF("[配置] 加载userId: %u\n", config.userId);
+
   // 验证校验和
   if (!verifyChecksum()) {
     DEBUG_PRINTLN("[配置] ❌ 校验和错误，配置无效");
+    return false;
+  }
+
+  // 额外验证：检查关键字段是否包含有效数据
+  // 检查字符串是否为有效 ASCII（防止垃圾数据通过 checksum 验证）
+  auto isValidString = [](const char *str, size_t len) -> bool {
+    if (str[0] == '\0' || str[0] == (char)0xFF)
+      return true; // 允许空字符串
+    for (size_t i = 0; i < len && str[i] != '\0'; i++) {
+      if (str[i] < 32 || str[i] > 126)
+        return false; // 非可打印字符
+    }
+    return true;
+  };
+
+  // 验证所有字符串字段
+  if (!isValidString(config.mqttServer, sizeof(config.mqttServer)) ||
+      !isValidString(config.mqttUser, sizeof(config.mqttUser)) ||
+      !isValidString(config.mqttPassword, sizeof(config.mqttPassword)) ||
+      !isValidString(config.deviceUUID, sizeof(config.deviceUUID)) ||
+      !isValidString(config.brand, sizeof(config.brand))) {
+    DEBUG_PRINTLN("[配置] ❌ 包含无效字符，配置损坏");
+    return false;
+  }
+
+  // 验证数值字段的合理性
+  if (config.mqttPort == 0 || config.mqttPort > 65535) {
+    DEBUG_PRINTLN("[配置] ❌ MQTT端口无效");
     return false;
   }
 
@@ -57,15 +96,25 @@ bool ConfigManager::save() {
 void ConfigManager::resetToDefault() {
   DEBUG_PRINTLN("[配置] 重置为默认配置");
 
+  // 清空整个结构体（防止残留数据）
+  memset(&config, 0, sizeof(DeviceConfig));
+
   // MQTT服务器配置（使用config.h中的默认值）
   strncpy(config.mqttServer, MQTT_SERVER, sizeof(config.mqttServer) - 1);
+  config.mqttServer[sizeof(config.mqttServer) - 1] = '\0'; // 确保空终止
+
   config.mqttPort = MQTT_PORT;
+
   strncpy(config.mqttUser, MQTT_USER, sizeof(config.mqttUser) - 1);
+  config.mqttUser[sizeof(config.mqttUser) - 1] = '\0';
+
   strncpy(config.mqttPassword, MQTT_PASSWORD, sizeof(config.mqttPassword) - 1);
+  config.mqttPassword[sizeof(config.mqttPassword) - 1] = '\0';
 
   // 设备UUID：使用MAC地址生成
   String uuid = generateUUID();
   strncpy(config.deviceUUID, uuid.c_str(), sizeof(config.deviceUUID) - 1);
+  config.deviceUUID[sizeof(config.deviceUUID) - 1] = '\0';
 
   // 用户ID：默认为0（未绑定）
   config.userId = 0;
@@ -209,4 +258,19 @@ String ConfigManager::generateUUID() {
   String mac = WiFi.macAddress();
   mac.replace(":", "");
   return "ESP_" + mac;
+}
+
+// ✅ 新增：保存userId到EEPROM
+void ConfigManager::saveUserId(uint32_t userId) {
+  config.userId = userId;
+  EEPROM.put(EEPROM_USER_ID, userId);
+  EEPROM.commit();
+  DEBUG_PRINTF("[配置] ✅ 已保存userId: %u\n", userId);
+}
+
+// ✅ 新增：保存deviceId到EEPROM
+void ConfigManager::saveDeviceId(uint32_t deviceId) {
+  EEPROM.put(EEPROM_DEVICE_ID, deviceId);
+  EEPROM.commit();
+  DEBUG_PRINTF("[配置] ✅ 已保存deviceId: %u\n", deviceId);
 }

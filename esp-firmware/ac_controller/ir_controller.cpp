@@ -79,26 +79,12 @@ void IRController::handleReceive() {
     String rawStr = resultsToRawString(&results);
     DEBUG_PRINTF("[红外] 原始数据: %s\n", rawStr.c_str());
 
-    // 触发回调
+    // 触发回调（由主程序处理解析和发布）
     if (receiveCallback != nullptr) {
       receiveCallback(&results);
     }
 
-    // 发布到MQTT（状态更新）
-    if (MQTTClient::isConnected()) {
-      StaticJsonDocument<512> doc;
-      doc["source"] = "ir_recv";
-      doc["protocol"] = typeToString(results.decode_type);
-      doc["value"] = String((unsigned long long)results.value, HEX);
-      doc["bits"] = results.bits;
-      doc["raw"] = rawStr;
-
-      char payload[512];
-      serializeJson(doc, payload);
-
-      String topic = MQTTClient::getTopic("event");
-      MQTTClient::publish(topic.c_str(), payload);
-    }
+    // ⚠️ 移除了自动发布事件的代码，现在由主程序的 onIRReceived() 统一处理
 
     // 准备接收下一个信号
     irrecv.resume();

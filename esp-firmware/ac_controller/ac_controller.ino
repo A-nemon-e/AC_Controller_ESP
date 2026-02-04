@@ -23,6 +23,7 @@
 #include "ir_learning.h"
 #include "led_indicator.h"
 #include "mqtt_client.h"
+#include "scene_manager.h" // ✅ 新增：学习场景管理
 #include "sensors.h"
 #include "state_manager.h"
 #include "wifi_manager.h"
@@ -40,9 +41,13 @@ void onIRReceived(decode_results *results);
 void handleConfigUpdate(const char *json);
 void handleControlCommand(const char *json);
 void handleLearnCommand(const char *json);
-void handleAutoDetectCommand(const char *json); // ✅ 新增
+void handleAutoDetectCommand(const char *json);   // ✅ 新增
+void handleConfigBindingUpdate(const char *json); // ✅ 新增：处理绑定配置
 void printSystemInfo();
-void publishDeviceAnnounce(); // ✅ 设备上线消息
+void publishDeviceAnnounce();                       // ✅ 设备上线消息
+bool tryParseProtocol(decode_results *results);     // ✅ 协议解析
+bool tryMatchLearnedScene(decode_results *results); // ✅ 场景匹配
+void publishIREvent(decode_results *results);       // ✅ 红外事件上报
 
 // ===== 初始化 =====
 void setup() {
@@ -99,7 +104,10 @@ void setup() {
   // 8. 初始化Ghost检测器
   GhostDetector::init();
 
-  // 9. 初始化状态管理器
+  // 9. 初始化场景管理器
+  SceneManager::init();
+
+  // 10. 初始化状态管理器
   StateManager::init();
 
   // 10. 订阅配置更新topic（基于MAC地址）
@@ -198,19 +206,128 @@ void onIRReceived(decode_results *results) {
     return;
   }
 
-  // ===== 优先级3: 正常模式（Ghost检测）=====
+  // ===== 优先级3: 正常模式 - 完整解析 =====
+
   // 触发Ghost检测
   GhostDetector::onIRReceived();
 
-  // TODO: 解析红外数据更新空调状态
-  // 目前仅记录source为ir_recv
-  StateManager::setState(true,         // 假设收到信号表示开机
-                         "cool",       // 默认模式
-                         26,           // 默认温度
-                         0,            // 默认风速
-                         false, false, // 扫风
-                         "ir_recv"     // 来源
-  );
+  // 尝试协议解析
+  if (tryParseProtocol(results)) {
+    DEBUG_PRINTLN("[主程序] ✅ 协议解析成功，状态已更新");
+    return;
+  }
+
+  // 尝试匹配学习场景
+  if (tryMatchLearnedScene(results)) {
+    DEBUG_PRINTLN("[主程序] ✅ 匹配到学习场景，状态已更新");
+    return;
+  }
+
+  // 都不匹配，只发布事件
+  DEBUG_PRINTLN("[主程序] ⚠️ 无法解析，只发布事件");
+  publishIREvent(results);
+}
+
+// ===== 尝试协议解析 =====
+bool tryParseProtocol(decode_results *results) {
+  DeviceConfig &cfg = ConfigManager::getConfig();
+
+  // 检查是否配置了品牌
+  if (cfg.brand[0] == '\0') {
+    DEBUG_PRINTLN("[协议解析] 未配置品牌，跳过");
+    return false;
+  }
+
+  // 使用 IRremoteESP8266 库解析
+  // 根据协议类型提取参数
+  IRac ac(PIN_IR_SEND);
+
+  // 检查是否为空调协议
+  if (!ac.isProtocolSupported(results->decode_type)) {
+    DEBUG_PRINTF("[协议解析] 协议 %d 不是空调协议\n", results->decode_type);
+    return false;
+  }
+
+  // 尝试解析状态（IRremoteESP8266的高级功能）
+  stdAc::state_t state;
+  if (!IRAcUtils::decodeToState(results, &state)) {
+    DEBUG_PRINTLN("[协议解析] ❌ 状态解析失败");
+    return false;
+  }
+
+  // 提取参数并更新状态
+  bool power = state.power;
+  const char *mode = "cool";
+
+  // 转换模式
+  switch (state.mode) {
+  case stdAc::opmode_t::kCool:
+    mode = "cool";
+    break;
+  case stdAc::opmode_t::kHeat:
+    mode = "heat";
+    break;
+  case stdAc::opmode_t::kFan:
+    mode = "fan";
+    break;
+  case stdAc::opmode_t::kDry:
+    mode = "dry";
+    break;
+  case stdAc::opmode_t::kAuto:
+    mode = "auto";
+    break;
+  default:
+    mode = "cool";
+  }
+
+  uint8_t temp = state.degrees;
+  uint8_t fan = (uint8_t)state.fanspeed;
+  bool swingV = state.swingv != stdAc::swingv_t::kOff;
+  bool swingH = state.swingh != stdAc::swingh_t::kOff;
+
+  // 更新状态
+  StateManager::setState(power, mode, temp, fan, swingV, swingH, "ir_protocol");
+
+  DEBUG_PRINTF("[协议解析] ✅ 解析成功: %s %s %d°C\n", power ? "开" : "关",
+               mode, temp);
+
+  return true;
+}
+
+// ===== 尝试匹配学习场景 =====
+bool tryMatchLearnedScene(decode_results *results) {
+  String rawData = IRController::getLastRawData(); // 使用IRController的方法
+  LearnedScene scene;
+
+  if (SceneManager::matchScene(rawData.c_str(), scene)) {
+    // 匹配成功，使用场景参数更新状态
+    StateManager::setState(scene.power, scene.mode, scene.temp, 0, false, false,
+                           "ir_learned");
+
+    DEBUG_PRINTF("[场景匹配] ✅ 匹配到: %s\n", scene.key);
+    return true;
+  }
+
+  DEBUG_PRINTLN("[场景匹配] ❌ 未匹配到任何场景");
+  return false;
+}
+
+// ===== 发布红外事件 =====
+void publishIREvent(decode_results *results) {
+  DEBUG_PRINTLN("[主程序] 发布红外事件");
+  StaticJsonDocument<512> doc;
+  doc["type"] = "ir_event";
+  doc["protocol"] =
+      typeToString(results->decode_type); // 使用IRremoteESP8266的函数
+  doc["value"] = uint64ToString(results->value, 16);
+  doc["bits"] = results->bits;
+  doc["rawData"] = IRController::getLastRawData(); // 使用IRController的方法
+
+  char payload[512];
+  serializeJson(doc, payload);
+
+  String topic = MQTTClient::getTopic("ir_event");
+  MQTTClient::publish(topic.c_str(), payload);
 }
 
 // ===== MQTT消息回调函数 =====
@@ -228,7 +345,14 @@ void onMQTTMessage(char *topic, uint8_t *payload, unsigned int length) {
   DEBUG_PRINTF("[主程序] Topic: %s\n", topic);
   DEBUG_PRINTF("[主程序] Message: %s\n", message);
 
-  // 检查是否是配置更新消息
+  // ✅ 优先处理：设备绑定配置 (包含 /config/update)
+  if (topicStr.indexOf("/config/update") >= 0) {
+    DEBUG_PRINTLN("[主程序] → 收到设备绑定配置");
+    handleConfigBindingUpdate(message);
+    return;
+  }
+
+  // 检查是否是配置更新消息 (包含 /config/)
   if (topicStr.indexOf("/config/") >= 0) {
     DEBUG_PRINTLN("[主程序] → 收到配置更新");
     handleConfigUpdate(message);
@@ -245,7 +369,7 @@ void onMQTTMessage(char *topic, uint8_t *payload, unsigned int length) {
   } else if (topicStr.endsWith("/config")) {
     handleConfigUpdate(message);
 
-  } else if (topicStr.endsWith("/auto_detect")) { // ✅ 新增
+  } else if (topicStr.endsWith("/auto_detect")) {
     handleAutoDetectCommand(message);
   }
 }
@@ -440,4 +564,46 @@ void publishDeviceAnnounce() {
     DEBUG_PRINTF("[设备发现] 设备已绑定（用户ID: %u），跳过发现消息\n",
                  cfg.userId);
   }
+}
+
+// ✅ 新增：处理设备绑定配置
+void handleConfigBindingUpdate(const char *json) {
+  DEBUG_PRINTLN("[绑定配置] 处理设备绑定配置");
+
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, json);
+
+  if (error) {
+    DEBUG_PRINTLN("[绑定配置] ❌ JSON解析失败");
+    return;
+  }
+
+  // 提取userId和deviceId
+  if (!doc.containsKey("userId") || !doc.containsKey("deviceId")) {
+    DEBUG_PRINTLN("[绑定配置] ❌ 缺少必需字段");
+    return;
+  }
+
+  uint32_t userId = doc["userId"];
+  uint32_t deviceId = doc["deviceId"];
+
+  DEBUG_PRINTF("[绑定配置] 收到绑定配置 - userID: %u, deviceID: %u\n", userId,
+               deviceId);
+
+  // 保存到EEPROM
+  ConfigManager::saveUserId(userId);
+  ConfigManager::saveDeviceId(deviceId);
+
+  DEBUG_PRINTLN("[绑定配置] ✅ 配置已保存到EEPROM");
+
+  // 重新订阅MQTT topic（使用新的userId）
+  MQTTClient::resubscribe();
+
+  // 延迟一下，确保订阅生效
+  delay(100);
+
+  // 发布确认消息
+  publishDeviceAnnounce();
+
+  DEBUG_PRINTLN("[绑定配置] ✅ 设备绑定完成");
 }

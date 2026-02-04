@@ -57,6 +57,12 @@ public:
   // 打印配置信息
   static void printConfig();
 
+  // ✅ 新增：保存userId到EEPROM
+  static void saveUserId(uint32_t userId);
+
+  // ✅ 新增：保存deviceId到EEPROM
+  static void saveDeviceId(uint32_t deviceId);
+
 private:
   static DeviceConfig config;
   static bool loaded;

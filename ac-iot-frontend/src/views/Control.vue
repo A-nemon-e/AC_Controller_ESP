@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import { useDevicesStore } from '@/stores/devices'
 import { devicesApi } from '@/api/devices'
@@ -213,6 +213,28 @@ const applyCommand = async () => {
   }
 }
 
+// ✅ 新增：轮询刷新配置
+const POLL_INTERVAL = 3000 // 3秒刷新一次
+let pollTimer: number | null = null
+
+// ✅ 新增：启动轮询
+const startPolling = () => {
+  if (pollTimer) return
+  pollTimer = setInterval(async () => {
+    if (currentDevice.value?.id) {
+      await devicesStore.fetchDeviceStatus(currentDevice.value.id)
+    }
+  }, POLL_INTERVAL) as unknown as number
+}
+
+// ✅ 新增：停止轮询
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
 // 同步当前状态到命令
 watch(
   currentState,
@@ -241,6 +263,16 @@ watch(
   },
   { immediate: true }
 )
+
+// ✅ 新增：组件挂载时启动轮询
+onMounted(() => {
+  startPolling()
+})
+
+// ✅ 新增：组件卸载时停止轮询
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped>

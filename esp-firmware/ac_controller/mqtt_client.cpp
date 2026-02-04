@@ -12,6 +12,10 @@ bool MQTTClient::connected = false;
 unsigned long MQTTClient::lastReconnectAttempt = 0;
 void (*MQTTClient::externalCallback)(char *, uint8_t *, unsigned int) = nullptr;
 
+// 故障回退机制变量
+uint8_t MQTTClient::eepromFailCount = 0;
+bool MQTTClient::useDefaultCredentials = false;
+
 void MQTTClient::connect() {
   DEBUG_PRINTLN("[MQTT] 初始化MQTT客户端");
 
@@ -77,8 +81,13 @@ void MQTTClient::setCallback(void (*callback)(char *, uint8_t *,
 
 String MQTTClient::getTopic(const char *suffix) {
   // 生成topic: ac/user_{userId}/dev_{uuid}/{suffix}
+  // ✅ 修复：使用 EEPROM 配置中的 userId，而不是硬编码的 USER_ID
+  DeviceConfig &cfg = ConfigManager::getConfig();
+
   char topic[128];
-  snprintf(topic, sizeof(topic), "ac/user_%d/dev_%s/%s", USER_ID, DEVICE_UUID,
+  snprintf(topic, sizeof(topic), "ac/user_%u/dev_%s/%s",
+           cfg.userId,     // ← 使用 EEPROM 中的 userId
+           cfg.deviceUUID, // ← 使用 EEPROM 中的 UUID
            suffix);
   return String(topic);
 }
@@ -114,20 +123,75 @@ bool MQTTClient::reconnect() {
   // 从配置获取凭证
   DeviceConfig &cfg = ConfigManager::getConfig();
 
-  // 尝试连接
-  if (mqttClient.connect(clientId.c_str(), cfg.mqttUser, cfg.mqttPassword)) {
+  // 配置有效性检查：防止使用 EEPROM 中的垃圾数据
+  // 检查字符串是否为空或包含不可打印字符（如 0xFF）
+  auto isValidString = [](const char *str, size_t maxLen) -> bool {
+    if (str[0] == '\0' || str[0] == (char)0xFF)
+      return false;
+    // 检查是否包含可打印字符
+    for (size_t i = 0; i < maxLen && str[i] != '\0'; i++) {
+      if (str[i] < 32 || str[i] > 126)
+        return false; // 不是 ASCII 可打印字符
+    }
+    return true;
+  };
+
+  // 智能回退机制：EEPROM 配置失败多次后强制使用默认值
+  bool eepromConfigAvailable =
+      isValidString(cfg.mqttUser, sizeof(cfg.mqttUser)) &&
+      isValidString(cfg.mqttPassword, sizeof(cfg.mqttPassword));
+
+  // 如果 EEPROM 配置已失败超过阈值，强制使用默认值
+  if (eepromConfigAvailable && eepromFailCount >= MAX_EEPROM_FAIL) {
+    DEBUG_PRINTF("[MQTT] ⚠️ EEPROM配置已失败%d次，强制回退到默认值\n",
+                 eepromFailCount);
+    useDefaultCredentials = true;
+    eepromConfigAvailable = false;
+  }
+
+  const char *mqttUser = (eepromConfigAvailable && !useDefaultCredentials)
+                             ? cfg.mqttUser
+                             : MQTT_USER;
+  const char *mqttPassword = (eepromConfigAvailable && !useDefaultCredentials)
+                                 ? cfg.mqttPassword
+                                 : MQTT_PASSWORD;
+
+  // 调试：输出 MQTT 连接信息
+  DEBUG_PRINTF("[MQTT] 服务器: %s:%d\n", MQTT_SERVER, MQTT_PORT);
+  DEBUG_PRINTF("[MQTT] 客户端ID: %s\n", clientId.c_str());
+  DEBUG_PRINTF("[MQTT] 用户名: %s %s\n", mqttUser,
+               (eepromConfigAvailable && !useDefaultCredentials)
+                   ? "(来自EEPROM)"
+                   : "(使用默认值)");
+  DEBUG_PRINTF("[MQTT] 密码长度: %d %s\n", strlen(mqttPassword),
+               (eepromConfigAvailable && !useDefaultCredentials)
+                   ? "(来自EEPROM)"
+                   : "(使用默认值)");
+  if (useDefaultCredentials) {
+    DEBUG_PRINTF("[MQTT] ⚠️ 已回退到默认值 (失败次数: %d/%d)\n", eepromFailCount,
+                 MAX_EEPROM_FAIL);
+  }
+
+  // 尝试连接（使用回退后的配置）
+  if (mqttClient.connect(clientId.c_str(), mqttUser, mqttPassword)) {
     DEBUG_PRINTLN("[MQTT] ✅ 连接成功");
     connected = true;
     LEDIndicator::setStatus(STATUS_READY);
+
+    // 连接成功后重置失败计数
+    eepromFailCount = 0;
+    useDefaultCredentials = false;
 
     // 订阅控制命令topic
     String cmdTopic = getTopic("cmd");
     String learnTopic = getTopic("learn/start");
     String configTopic = getTopic("config");
+    String configUpdateTopic = getTopic("config/update"); // ✅ 新增
 
     subscribe(cmdTopic.c_str());
     subscribe(learnTopic.c_str());
     subscribe(configTopic.c_str());
+    subscribe(configUpdateTopic.c_str()); // ✅ 新增
 
     // 发布上线消息
     String statusTopic = getTopic("status");
@@ -138,6 +202,37 @@ bool MQTTClient::reconnect() {
     DEBUG_PRINT("[MQTT] ❌ 连接失败，错误码: ");
     DEBUG_PRINTLN(mqttClient.state());
     connected = false;
+
+    // 如果使用的是 EEPROM 配置而非默认值，增加失败计数
+    if (eepromConfigAvailable && !useDefaultCredentials) {
+      eepromFailCount++;
+      DEBUG_PRINTF("[MQTT] EEPROM配置失败计数: %d/%d\n", eepromFailCount,
+                   MAX_EEPROM_FAIL);
+    }
+
     return false;
   }
+}
+
+// ✅ 新增：重新订阅topic（设备绑定后调用）
+void MQTTClient::resubscribe() {
+  if (!mqttClient.connected()) {
+    DEBUG_PRINTLN("[MQTT] ❌ 未连接，无法重新订阅");
+    return;
+  }
+
+  DEBUG_PRINTLN("[MQTT] 🔄 重新订阅topic（设备绑定后更新）");
+
+  // 订阅新的topic（基于更新后的userId）
+  String cmdTopic = getTopic("cmd");
+  String learnTopic = getTopic("learn/start");
+  String configTopic = getTopic("config");
+  String configUpdateTopic = getTopic("config/update");
+
+  subscribe(cmdTopic.c_str());
+  subscribe(learnTopic.c_str());
+  subscribe(configTopic.c_str());
+  subscribe(configUpdateTopic.c_str());
+
+  DEBUG_PRINTLN("[MQTT] ✅ 重新订阅完成");
 }

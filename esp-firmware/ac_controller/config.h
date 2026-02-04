@@ -32,14 +32,14 @@
 // ===== MQTT配置 =====
 // TODO: 改进为从EEPROM读取，支持服务器下发配置
 // ⚠️ 暂时未部署MQTT服务器，保持默认值即可
-#define MQTT_SERVER "mqtt.example.com" // MQTT服务器地址（暂未使用）
+#define MQTT_SERVER "10.0.10.13" // MQTT服务器地址（暂未使用）
 #define MQTT_PORT 1883
-#define MQTT_USER "esp_device"
-#define MQTT_PASSWORD "your_password"
+#define MQTT_USER "admin"
+#define MQTT_PASSWORD "2307yU5*"
 
 // 设备标识（临时硬编码，TODO: 改为从EEPROM或MAC生成）
 #define DEVICE_UUID "esp_001"
-#define USER_ID 1
+#define USER_ID 0
 
 // MQTT连接参数
 #define MQTT_KEEPALIVE 60         // 心跳间隔（秒）
@@ -63,11 +63,14 @@
 #define CURRENT_RATIO 0.01 // 电流转换比例
 
 // ===== EEPROM存储地址 =====
-#define EEPROM_SIZE 512
+#define EEPROM_SIZE 1024       // 总大小1KB
 #define EEPROM_WIFI_SSID 0     // SSID起始地址（最多32字节）
 #define EEPROM_WIFI_PASS 32    // 密码起始地址（最多64字节）
 #define EEPROM_DEVICE_UUID 96  // UUID起始地址（最多32字节）
 #define EEPROM_CONFIG_FLAG 128 // 配置标志位（1字节，0x55表示已配置）
+#define EEPROM_USER_ID 129     // ✅ 用户ID地址（4字节）
+#define EEPROM_DEVICE_ID 133   // ✅ 设备ID地址（4字节）
+#define EEPROM_SCENES_ADDR 512 // ✅ 学习场景起始地址（512字节空间）
 
 // ===== 调试配置 =====
 #define SERIAL_BAUD 115200

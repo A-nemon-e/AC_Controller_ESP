@@ -25,8 +25,15 @@ export class MqttService implements OnModuleInit {
         }
 
         this.logger.log(`Connecting to MQTT Broker using URL provided in config...`);
+
+        // MQTT 连接选项（支持认证）
+        const options: mqtt.IClientOptions = {
+            username: this.configService.get<string>('MQTT_USER'),
+            password: this.configService.get<string>('MQTT_PASSWORD'),
+        };
+
         // Connect to the broker
-        this.client = mqtt.connect(url);
+        this.client = mqtt.connect(url, options);
 
         this.client.on('connect', () => {
             this.logger.log('Successfully connected to MQTT Broker');
@@ -44,15 +51,24 @@ export class MqttService implements OnModuleInit {
     }
 
     private subscribeToTopics() {
-        // Subscribe to all AC device topics for debugging
-        // ac/user_{id}/dev_{id}/status
-        const topicPattern = 'ac/+/+/status';
-        this.client.subscribe(topicPattern, (err) => {
-            if (err) {
-                this.logger.error(`Failed to subscribe to ${topicPattern}`);
-            } else {
-                this.logger.log(`Subscribed to ${topicPattern}`);
-            }
+        // 订阅所有设备相关的 topic
+        const topicPatterns = [
+            'ac/+/+/status',           // 状态上报
+            'ac/+/+/event',            // Ghost 事件
+            'ac/+/+/ir_event',         // ✅ 红外事件
+            'ac/+/+/learn/result',     // 学习结果
+            'ac/+/+/auto_detect/#',    // 自动检测（状态+结果）
+            'ac/discovery/#',          // 设备发现
+        ];
+
+        topicPatterns.forEach(pattern => {
+            this.client.subscribe(pattern, (err) => {
+                if (err) {
+                    this.logger.error(`Failed to subscribe to ${pattern}`);
+                } else {
+                    this.logger.log(`Subscribed to ${pattern}`);
+                }
+            });
         });
     }
 

@@ -15,7 +15,7 @@
     <van-empty v-if="schedules.length === 0" description="暂无定时任务" />
 
     <van-cell-group v-else inset v-for="schedule in schedules" :key="schedule.id" class="schedule-item">
-      <van-cell :title="schedule.name">
+      <van-cell :title="schedule.name || '未命名任务'">
         <template #right-icon>
           <van-switch
             v-model="schedule.enabled"
@@ -185,6 +185,7 @@ const repeatColumns = [
 ]
 
 const formatTime = (hour: number, minute: number) => {
+  if (hour === undefined || minute === undefined) return '--:--'
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
@@ -193,20 +194,27 @@ const formatDate = (date: string) => {
 }
 
 const repeatText = (repeat: string) => {
+  if (!repeat) return '未设置'
   const map = { daily: '每天', weekdays: '工作日', weekends: '周末' }
   return map[repeat] || repeat
 }
 
 const actionText = (action: any) => {
+  if (!action) return '--'
   if (!action.power) return '关机'
   return `开机 → ${action.mode === 'cool' ? '制冷' : '制热'} ${action.temp}°C`
 }
 
 const fetchSchedules = async () => {
   try {
-    schedules.value = await schedulesApi.getAll()
+    const result = await schedulesApi.getAll()
+    // 过滤掉无效的任务（没有 id 或 name 的空对象）
+    schedules.value = Array.isArray(result) 
+      ? result.filter(s => s && s.id) 
+      : []
   } catch (error) {
     showToast('加载失败')
+    schedules.value = []
   }
 }
 
@@ -228,7 +236,11 @@ const editSchedule = (schedule: Schedule) => {
     hour: schedule.hour,
     minute: schedule.minute,
     repeat: schedule.repeat,
-    action: { ...schedule.action },
+    action: schedule.action ? { ...schedule.action } : {
+      power: false,
+      mode: 'cool',
+      temp: 26,
+    },
   }
   showCreate.value = true
 }

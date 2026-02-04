@@ -58,13 +58,16 @@ export class UplinkService {
                 case 'event':
                     await this.handleEvent(device, data);
                     break;
+                case 'ir_event':  // ✅ 新增：无法解析的红外事件
+                    await this.handleIREvent(device, data);
+                    break;
                 case 'learn/result':
                     await this.handleLearn(device, data);
                     break;
-                case 'auto_detect/result':  // ✅  新增
+                case 'auto_detect/result':
                     await this.handleAutoDetectResult(device, data);
                     break;
-                case 'auto_detect/status':  // ✅ 新增
+                case 'auto_detect/status':
                     await this.handleAutoDetectStatus(device, data);
                     break;
                 default:
@@ -157,6 +160,28 @@ export class UplinkService {
 
             this.logger.log(`Learned IR Code for ${data.key} on Device ${device.id}`);
         }
+    }
+
+    /**
+     * 处理无法解析的红外事件
+     */
+    private async handleIREvent(device: Device, data: any) {
+        // 记录无法解析的红外信号到审计日志
+        const log = this.auditRepo.create({
+            deviceId: device.id,
+            action: AuditAction.IR_UNKNOWN,
+            details: {
+                type: data.type,
+                protocol: data.protocol,
+                value: data.value,
+                bits: data.bits,
+                rawData: data.rawData?.substring(0, 200), // 截断过长数据
+                timestamp: new Date()
+            },
+        });
+        await this.auditRepo.save(log);
+
+        this.logger.debug(`Device ${device.id} received unknown IR signal: ${data.protocol}`);
     }
 
     // ===== 自动协议检测 =====
