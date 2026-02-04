@@ -24,14 +24,39 @@ export class DevicesService {
     ) { }
 
     async create(userId: number, createDeviceDto: CreateDeviceDto): Promise<Device> {
-        const device = this.devicesRepository.create({
-            ...createDeviceDto,
-            userId,
-        });
+        let device = await this.devicesRepository.findOne({ where: { uuid: createDeviceDto.uuid } });
+
+        if (device) {
+            this.logger.log(`Device ${createDeviceDto.uuid} already exists, updating ownership (Re-claim)`);
+            // 更新所有权
+            device.userId = userId;
+            device.name = createDeviceDto.name; // 更新名字
+        } else {
+            device = this.devicesRepository.create({
+                ...createDeviceDto,
+                userId,
+            });
+        }
+
         const saved = await this.devicesRepository.save(device);
 
-        // ✅ 新增：推送配置到ESP，完成设备绑定
+        // ✅ 推送配置到ESP
+        // 1. 标准推送到 ac/user_0/dev_{uuid}/config/update (针对新设备)
         await this.pushDeviceConfig(saved);
+
+        // 2. ✅ 额外：如果有MAC地址，推送到 ac/config/{mac} (针对重置或重连设备)
+        if (createDeviceDto.mac) {
+            const macClean = createDeviceDto.mac.replace(/:/g, ''); // 确保无冒号
+            const topicMac = `ac/config/${macClean}`;
+            const payload = {
+                userId: saved.userId,
+                deviceId: saved.id,
+                // 这里我们不需要 "update": true 之类的，因为 config_manager.cpp 不检查这个
+                // 它只要看到 json 里有 userId 就会更新
+            };
+            this.mqttService.publish(topicMac, JSON.stringify(payload));
+            this.logger.log(`Forced config update to MAC topic ${topicMac}`);
+        }
 
         return saved;
     }

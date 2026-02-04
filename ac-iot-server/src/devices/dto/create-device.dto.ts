@@ -11,5 +11,15 @@ export class CreateDeviceDto {
 
     @IsString()
     @IsOptional()
+    @IsString()
+    @IsOptional()
     brandConfig?: string;
+
+    @IsString()
+    @IsOptional()
+    mac?: string;
+
+    @IsString()
+    @IsOptional()
+    ip?: string;
 }

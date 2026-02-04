@@ -118,8 +118,11 @@ const newDevice = ref({
 })
 
 const viewDevice = (id: number) => {
-  // TODO: 跳转到设备详情页
-  showToast('设备详情功能开发中')
+  const device = devices.value.find(d => d.id === id)
+  if (device) {
+    devicesStore.setCurrentDevice(device)
+    router.push('/control')
+  }
 }
 
 const handleLogout = async () => {
@@ -180,7 +183,12 @@ const addDiscoveredDevice = async (device: DiscoveredDevice) => {
 
   adding.value = true
   try {
-    const newDev = await devicesApi.create({ uuid: device.uuid, name })
+    const newDev = await devicesApi.create({ 
+      uuid: device.uuid, 
+      name,
+      mac: device.mac, // ✅ 传递 MAC 地址
+      ip: device.ip    // ✅ 传递 IP 地址
+    })
     if (newDev) {
       devicesStore.addDevice(newDev)
       showToast('添加成功')
