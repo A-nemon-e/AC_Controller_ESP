@@ -151,6 +151,8 @@ verify_*.js
 *.rar
 *.7z
 
+
+.env.production
 # ===== 保留示例文件 =====
 !.env.example
 !.env.production.example

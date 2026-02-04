@@ -3,7 +3,7 @@
     <div class="login-container">
       <div class="logo">
         <h1>🌡️ AC IoT</h1>
-        <p>空调智能控制系统</p>
+        <p>{{ isRegister ? '注册新账号' : '空调智能控制系统' }}</p>
       </div>
 
       <van-form @submit="onSubmit">
@@ -38,8 +38,12 @@
             :loading="authStore.loading"
             size="large"
           >
-            登录
+            {{ isRegister ? '注册并登录' : '登录' }}
           </van-button>
+        </div>
+
+        <div class="switch-mode" @click="toggleMode">
+            {{ isRegister ? '已有账号？去登录' : '没有账号？去注册' }}
         </div>
       </van-form>
     </div>
@@ -60,15 +64,25 @@ const formData = reactive({
   password: '',
 })
 const remember = ref(false)
+const isRegister = ref(false)
+
+const toggleMode = () => {
+    isRegister.value = !isRegister.value
+}
 
 const onSubmit = async () => {
-  const success = await authStore.login(formData)
+  let success = false
+  if (isRegister.value) {
+      success = await authStore.register(formData)
+  } else {
+      success = await authStore.login(formData)
+  }
 
   if (success) {
-    showToast('登录成功')
+    showToast(isRegister.value ? '注册成功' : '登录成功')
     router.push('/')
   } else {
-    showToast('登录失败，请检查用户名和密码')
+    showToast(isRegister.value ? '注册失败，用户名可能已存在' : '登录失败，请检查用户名和密码')
   }
 }
 </script>
@@ -111,5 +125,18 @@ const onSubmit = async () => {
 
 .submit-btn {
   margin: 24px 16px 16px 16px;
+}
+
+.switch-mode {
+    text-align: center;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 16px;
+    opacity: 0.8;
+}
+.switch-mode:hover {
+    text-decoration: underline;
+    opacity: 1;
 }
 </style>

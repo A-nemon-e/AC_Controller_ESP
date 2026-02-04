@@ -23,6 +23,20 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    const register = async (credentials: LoginRequest) => {
+        loading.value = true
+        try {
+            await authApi.register(credentials.username, credentials.password)
+            // 注册后直接通过login流程获取token
+            return await login(credentials)
+        } catch (error) {
+            console.error('Register failed:', error)
+            return false
+        } finally {
+            loading.value = false
+        }
+    }
+
     const logout = () => {
         user.value = null
         token.value = null
@@ -36,6 +50,7 @@ export const useAuthStore = defineStore('auth', () => {
         token,
         loading,
         login,
+        register,
         logout,
         isAuthenticated,
     }
