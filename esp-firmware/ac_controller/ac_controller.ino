@@ -604,6 +604,10 @@ void handleConfigBindingUpdate(const char *json) {
   ConfigManager::saveUserId(userId);
   ConfigManager::saveDeviceId(deviceId);
 
+  // ✅ 关键修复：必须调用 save() 更新结构体和校验和！
+  // 否则下次启动 load() 会读取旧的结构体（UserId=0）且校验通过，覆盖正确的配置
+  ConfigManager::save();
+
   DEBUG_PRINTLN("[绑定配置] ✅ 配置已保存到EEPROM");
 
   // 重新订阅MQTT topic（使用新的userId）

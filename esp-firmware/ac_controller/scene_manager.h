@@ -24,10 +24,10 @@ struct LearnedScene {
   uint16_t checksum; // 校验和
 };
 
-// 学习场景集合（最多8个场景）
+// 学习场景集合（最多7个场景，适配4KB EEPROM）
 struct LearnedScenes {
   uint8_t count;          // 已学习场景数量
-  LearnedScene scenes[8]; // 场景数组
+  LearnedScene scenes[7]; // ✅ 减少到7个，防止溢出 (每个约476字节)
   uint16_t checksum;      // 整体校验和
 };
 

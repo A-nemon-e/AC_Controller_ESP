@@ -24,29 +24,48 @@ void ConfigManager::init() {
 }
 
 bool ConfigManager::load() {
+  // ✅ 强制刷新：先关闭再打开，确保 buffer 内容来自真实的 Flash
+  EEPROM.end();
+  EEPROM.begin(EEPROM_SIZE);
+
   DEBUG_PRINTLN("[配置] 从EEPROM加载配置...");
 
   // 读取配置结构体
   EEPROM.get(EEPROM_CONFIG_ADDR, config);
 
-  // ✅ 新增：加载userId和deviceId
-  EEPROM.get(EEPROM_USER_ID, config.userId);
   uint32_t deviceId;
   EEPROM.get(EEPROM_DEVICE_ID, deviceId);
 
-  // 检查是否是未初始化的EEPROM（0xFFFFFFFF）或异常大的值（可能是残留数据）
-  if (config.userId == 0xFFFFFFFF || config.userId > 1000000) {
-    DEBUG_PRINTLN("[配置] userId无效或未初始化，强制重置为0");
-    config.userId = 0;
-  }
-
-  DEBUG_PRINTF("[配置] 加载userId: %u\n", config.userId);
+  // ⚠️ 关键修改：不要在校验前覆盖 config.userId，否则会导致校验失败且丢失数据
+  // EEPROM.get(EEPROM_USER_ID, config.userId);
 
   // 验证校验和
   if (!verifyChecksum()) {
-    DEBUG_PRINTLN("[配置] ❌ 校验和错误，配置无效");
-    return false;
+    DEBUG_PRINTF("[配置] ❌ 校验和错误! 计算值: 0x%02X, 存储值: 0x%02X\n",
+                 calculateChecksum(), config.checksum);
+
+    // 尝试从独立槽位恢复身份
+    uint32_t savedUserId;
+    EEPROM.get(EEPROM_USER_ID, savedUserId);
+    DEBUG_PRINTF("[配置] 检查独立备份UserID: %u\n", savedUserId);
+
+    resetToDefault();
+
+    // 如果独立槽位有有效数据，恢复它
+    if (savedUserId != 0 && savedUserId != 0xFFFFFFFF) {
+      config.userId = savedUserId;
+      DEBUG_PRINTF("[配置] 已从备份恢复userId: %u\n", savedUserId);
+
+      save(); // 保存修复后的配置
+      DEBUG_PRINTLN("[配置] ✅ 已通过备份修复配置");
+      return true; // ✅ 视为加载成功，阻止 init() 再次重置
+    }
+
+    save();
+    return false; // 只有真的无法恢复时才返回 false
   }
+
+  DEBUG_PRINTF("[配置] 加载userId: %u\n", config.userId);
 
   // 额外验证：检查关键字段是否包含有效数据
   // 检查字符串是否为有效 ASCII（防止垃圾数据通过 checksum 验证）
@@ -82,6 +101,10 @@ bool ConfigManager::load() {
 }
 
 bool ConfigManager::save() {
+  // ✅ 强制刷新
+  EEPROM.end();
+  EEPROM.begin(EEPROM_SIZE);
+
   DEBUG_PRINTLN("[配置] 保存配置到EEPROM...");
 
   // 计算校验和
@@ -93,13 +116,17 @@ bool ConfigManager::save() {
   // ✅ 关键修复：同步保存 userId 到独立槽位，防止 load() 时被旧数据覆盖
   EEPROM.put(EEPROM_USER_ID, config.userId);
 
-  EEPROM.commit();
+  bool success = EEPROM.commit();
+  DEBUG_PRINTF("[配置] EEPROM提交结果: %s\n", success ? "成功" : "失败");
 
   DEBUG_PRINTLN("[配置] ✅ 配置已保存");
-  return true;
+  DEBUG_PRINTF("[配置] 写入Checksum: 0x%02X, UserID: %u\n", config.checksum,
+               config.userId);
+  return success;
 }
 
 void ConfigManager::resetToDefault() {
+  EEPROM.begin(EEPROM_SIZE); // ✅ 确保EEPROM已初始化
   DEBUG_PRINTLN("[配置] 重置为默认配置");
 
   // 清空整个结构体（防止残留数据）
@@ -110,6 +137,8 @@ void ConfigManager::resetToDefault() {
   config.mqttServer[sizeof(config.mqttServer) - 1] = '\0'; // 确保空终止
 
   config.mqttPort = MQTT_PORT;
+  DEBUG_PRINTF("[配置] 重置MQTT端口: %u (Hex: 0x%04X)\n", config.mqttPort,
+               config.mqttPort);
 
   strncpy(config.mqttUser, MQTT_USER, sizeof(config.mqttUser) - 1);
   config.mqttUser[sizeof(config.mqttUser) - 1] = '\0';
@@ -262,6 +291,12 @@ uint8_t ConfigManager::calculateChecksum() {
     sum ^= ptr[i];
   }
 
+  // 调试：验证结构体对齐和关键数据
+  // MQTT Port offset should be 64 (after 64 bytes of mqttServer)
+  // 1883 = 0x075B. Low byte 0x5B, High byte 0x07.
+  DEBUG_PRINTF("[校验] StructSize: %d, PortBytes: 0x%02X 0x%02X\n",
+               sizeof(DeviceConfig), ptr[64], ptr[65]);
+
   return sum;
 }
 
@@ -279,6 +314,7 @@ String ConfigManager::generateUUID() {
 
 // ✅ 新增：保存userId到EEPROM
 void ConfigManager::saveUserId(uint32_t userId) {
+  EEPROM.begin(EEPROM_SIZE); // ✅ 确保EEPROM已初始化
   config.userId = userId;
   EEPROM.put(EEPROM_USER_ID, userId);
   EEPROM.commit();
@@ -287,6 +323,7 @@ void ConfigManager::saveUserId(uint32_t userId) {
 
 // ✅ 新增：保存deviceId到EEPROM
 void ConfigManager::saveDeviceId(uint32_t deviceId) {
+  EEPROM.begin(EEPROM_SIZE); // ✅ 确保EEPROM已初始化
   EEPROM.put(EEPROM_DEVICE_ID, deviceId);
   EEPROM.commit();
   DEBUG_PRINTF("[配置] ✅ 已保存deviceId: %u\n", deviceId);

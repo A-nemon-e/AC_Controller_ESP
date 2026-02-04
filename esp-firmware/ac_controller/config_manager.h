@@ -31,8 +31,8 @@ struct DeviceConfig {
   char brand[16]; // 品牌："GREE", "MIDEA", "DAIKIN" 等
   uint8_t model;  // 型号代码 (0-255)
 
-  uint8_t checksum; // 校验和
-};
+  uint8_t checksum;        // 校验和
+} __attribute__((packed)); // ✅ 强制字节对齐，防止 Padding 导致校验和计算错误
 
 class ConfigManager {
 public:

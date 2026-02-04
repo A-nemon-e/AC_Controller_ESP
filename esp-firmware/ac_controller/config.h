@@ -63,7 +63,7 @@
 #define CURRENT_RATIO 0.01 // 电流转换比例
 
 // ===== EEPROM存储地址 =====
-#define EEPROM_SIZE 1024       // 总大小1KB
+#define EEPROM_SIZE 4096       // ✅ 扩容到4KB (ESP8266 Flash支持)
 #define EEPROM_WIFI_SSID 0     // SSID起始地址（最多32字节）
 #define EEPROM_WIFI_PASS 32    // 密码起始地址（最多64字节）
 #define EEPROM_DEVICE_UUID 96  // UUID起始地址（最多32字节）

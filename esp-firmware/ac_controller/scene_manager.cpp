@@ -125,6 +125,10 @@ void SceneManager::printScenes() {
 }
 
 bool SceneManager::save() {
+  // ✅ 强制刷新
+  EEPROM.end();
+  EEPROM.begin(EEPROM_SIZE);
+
   // 计算全局校验和
   scenes.checksum = calculateGlobalChecksum();
 
@@ -137,6 +141,10 @@ bool SceneManager::save() {
 }
 
 bool SceneManager::load() {
+  // ✅ 强制刷新
+  EEPROM.end();
+  EEPROM.begin(EEPROM_SIZE);
+
   // 从EEPROM读取
   EEPROM.get(EEPROM_SCENES_ADDR, scenes);
 
