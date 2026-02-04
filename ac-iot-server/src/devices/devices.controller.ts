@@ -27,6 +27,21 @@ export class DevicesController {
         return this.devicesService.findAll(req.user.userId);
     }
 
+    // ===== 设备发现 API (静态路由优先) =====
+
+    /**
+     * 获取所有可发现的未绑定设备
+     */
+    @Get('discovery/available')
+    async getAvailableDevices(@Query('maxAge') maxAge?: string) {
+        console.log('[Controller] 收到 discovery/available 请求'); // 直接 console.log 确保能看到
+        const maxAgeMinutes = maxAge ? parseInt(maxAge) : 5;
+        return {
+            devices: this.deviceDiscoveryService.getAvailableDevices(maxAgeMinutes),
+            count: this.deviceDiscoveryService.getDiscoveredDeviceCount(),
+        };
+    }
+
     @Delete(':id')
     remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
         return this.devicesService.remove(req.user.userId, id);
@@ -229,19 +244,6 @@ export class DevicesController {
     }
 
     // ===== 设备发现 API =====
-
-    /**
-     * 获取所有可发现的未绑定设备
-     * @param maxAge 设备最大离线时间（分钟），默认5分钟
-     */
-    @Get('discovery/available')
-    async getAvailableDevices(@Query('maxAge') maxAge?: string) {
-        const maxAgeMinutes = maxAge ? parseInt(maxAge) : 5;
-        return {
-            devices: this.deviceDiscoveryService.getAvailableDevices(maxAgeMinutes),
-            count: this.deviceDiscoveryService.getDiscoveredDeviceCount(),
-        };
-    }
 
     /**
      * 手动清理离线设备

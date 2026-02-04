@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -17,6 +17,7 @@ import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { RoutinesModule } from './routines/routines.module';
 import { UplinkModule } from './uplink/uplink.module';
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
 
 @Module({
   imports: [
@@ -57,7 +58,6 @@ import { UplinkModule } from './uplink/uplink.module';
     AuthModule,
     DevicesModule,
     RoutinesModule,
-    RoutinesModule,
     UplinkModule,
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
@@ -65,4 +65,10 @@ import { UplinkModule } from './uplink/uplink.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(LoggerMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

@@ -1,8 +1,18 @@
 import axios from 'axios'
 import type { AxiosInstance } from 'axios'
 
+const getBaseUrl = () => {
+    const url = import.meta.env.VITE_API_URL || ''
+    if (url.endsWith('/api')) {
+        return url
+    }
+    // 如果url不为空且不以/结尾，加上/
+    const prefix = url && !url.endsWith('/') ? '/' : ''
+    return `${url}${prefix}api`
+}
+
 const apiClient: AxiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '',
+    baseURL: getBaseUrl(),
     timeout: 10000,
 })
 

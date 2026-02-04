@@ -119,8 +119,8 @@ void setup() {
   // 11. 打印系统信息
   printSystemInfo();
 
-  // 12. 发送设备上线消息（用于设备发现）
-  publishDeviceAnnounce();
+  // 12. 发送设备上线消息 -> 移动到 loop 中检测到连接后发送
+  // publishDeviceAnnounce();
 
   DEBUG_PRINTLN();
   DEBUG_PRINTLN("========================================");
@@ -136,6 +136,16 @@ void loop() {
 
   // 维护MQTT连接
   MQTTClient::loop();
+
+  // ✅ 新增：检测MQTT连接状态变化，发送上线/发现消息
+  static bool lastMqttConnected = false;
+  bool currentMqttConnected = MQTTClient::isConnected();
+
+  if (currentMqttConnected && !lastMqttConnected) {
+    DEBUG_PRINTLN("[主程序] MQTT已连接，发送上线消息...");
+    publishDeviceAnnounce();
+  }
+  lastMqttConnected = currentMqttConnected;
 
   // 更新LED状态
   LEDIndicator::update();
