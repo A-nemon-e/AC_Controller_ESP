@@ -565,7 +565,7 @@ void publishDeviceAnnounce() {
 
     // 发布到 ac/discovery/<UUID>
     String topic = "ac/discovery/" + String(cfg.deviceUUID);
-    MQTTClient::publish(topic.c_str(), payload);
+    MQTTClient::publish(topic.c_str(), payload, true); // ✅ 设为 Retained 消息
 
     DEBUG_PRINTLN("[设备发现] ✅ 上线消息已发送");
     DEBUG_PRINTF("[设备发现] Topic: %s\n", topic.c_str());

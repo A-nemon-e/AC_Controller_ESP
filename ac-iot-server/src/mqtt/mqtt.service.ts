@@ -24,7 +24,7 @@ export class MqttService implements OnModuleInit {
             return;
         }
 
-        this.logger.log(`Connecting to MQTT Broker using URL provided in config...`);
+        this.logger.log(`Connecting to MQTT Broker: ${url} (User: ${this.configService.get<string>('MQTT_USER')})`);
 
         // MQTT 连接选项（支持认证）
         const options: mqtt.IClientOptions = {
