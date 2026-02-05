@@ -177,6 +177,18 @@ const currentDevice = computed(() => devicesStore.currentDevice)
 const currentState = computed(() => currentDevice.value?.lastState)
 const config = computed(() => currentDevice.value?.config)
 
+// ✅ 新增：正确解析 brandConfig
+const brandSetup = computed(() => {
+  if (!currentDevice.value?.brandConfig) return null
+  try {
+    const raw = currentDevice.value.brandConfig
+    return typeof raw === 'string' ? JSON.parse(raw) : raw
+  } catch (e) {
+    console.error('Failed to parse brandConfig:', e)
+    return null
+  }
+})
+
 const selectedDeviceId = ref<number>(currentDevice.value?.id || 0)
 
 const deviceOptions = computed(() =>
