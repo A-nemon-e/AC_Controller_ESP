@@ -123,7 +123,7 @@
         
         <!-- ✅ 新增: Model 切换提示 -->
         <div class="model-tip" @click="openModelSwitcher">
-          部分控制无效？点击此处切换 Model (当前: {{ config?.model || 1 }}) ➡️
+          部分控制无效？点击此处切换 Model (当前: {{ brandSetup?.model || 1 }}) ➡️
         </div>
       </van-cell-group>
     </template>
@@ -132,8 +132,8 @@
     <van-action-sheet v-model:show="showModelSheet" title="切换 Model">
       <div class="model-sheet-content">
         <div class="current-info">
-          <div>当前协议: <van-tag type="primary">{{ config?.brand || '未设置' }}</van-tag></div>
-          <div>当前 Model: <span class="model-id">{{ config?.model || 1 }}</span></div>
+          <div>当前协议: <van-tag type="primary">{{ brandSetup?.brand || '未设置' }}</van-tag></div>
+          <div>当前 Model: <span class="model-id">{{ brandSetup?.model || 1 }}</span></div>
         </div>
 
         <div class="model-actions">
@@ -326,18 +326,18 @@ onUnmounted(() => {
 
 // ===== Model 切换逻辑 =====
 const openModelSwitcher = () => {
-  if (!config.value?.brand) {
+  if (!brandSetup.value?.brand) {
     showToast('请先在设置页配置品牌')
     return
   }
-  customModelId.value = config.value.model || 1
+  customModelId.value = brandSetup.value.model || 1
   showModelSheet.value = true
 }
 
 const changeModel = async (delta: number) => {
-  if (!currentDevice.value || !config.value) return
+  if (!currentDevice.value || !brandSetup.value) return
   
-  const newModel = (config.value.model || 1) + delta
+  const newModel = (brandSetup.value.model || 1) + delta
   if (newModel < 1) return
 
   await doUpdateModel(newModel)
@@ -349,11 +349,12 @@ const applyCustomModel = async () => {
 }
 
 const doUpdateModel = async (newModel: number) => {
-  if (!currentDevice.value || !config.value) return
+  if (!currentDevice.value || !brandSetup.value) return
   
   switchingModel.value = true
   try {
-    await devicesApi.setBrand(currentDevice.value.id, config.value.brand, newModel)
+    const brand = brandSetup.value.brand ||  brandSetup.value.brandId;
+    await devicesApi.setBrand(currentDevice.value.id, brand, newModel)
     showToast({ message: `已切换至 Model ${newModel}`, icon: 'success' })
     
     // 手动刷新一下状态
