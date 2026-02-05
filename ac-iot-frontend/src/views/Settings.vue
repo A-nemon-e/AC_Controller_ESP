@@ -2,22 +2,18 @@
   <div class="settings-page">
     <!-- 设备管理 -->
     <van-cell-group inset title="设备管理">
-      <van-swipe-cell v-for="device in devices" :key="device.id">
         <van-cell
           :title="device.name"
           :label="`UUID: ${device.uuid}`"
-          is-link
           @click="viewDevice(device.id)"
         >
-          <template #extra>
-             <van-icon name="setting-o" size="24" color="#1989fa" @click.stop="openSetup(device)" style="margin-right: 15px; z-index: 10;" />
+          <template #right-icon>
+            <div class="cell-actions">
+               <van-icon name="setting-o" size="24" color="#1989fa" @click.stop="openSetup(device)" class="action-icon" />
+               <van-icon name="arrow" class="arrow-icon" />
+            </div>
           </template>
         </van-cell>
-        <template #right>
-          <van-button square type="primary" text="配置" @click="openSetup(device)" />
-          <van-button square type="danger" text="删除" @click="confirmDelete(device)" />
-        </template>
-      </van-swipe-cell>
       <van-cell title="添加新设备" is-link icon="plus" @click="showAddDevice = true" />
     </van-cell-group>
 
