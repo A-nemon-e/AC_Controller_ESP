@@ -188,16 +188,22 @@ const checkAutoDetectStatus = async () => {
             
             showSuccessToast(`识别成功: ${protocol} (Model ${model})`);
             
-            // 自动跳转到手动选择页，并选中对应品牌
-            // 这里我们稍微延迟一下让用户看到结果
-            setTimeout(() => {
-                // 预选品牌逻辑
-                searchText.value = protocol; // 搜索该品牌
-                selectedBrand.value = { name: protocol, model: model };
+            showSuccessToast(`识别成功: ${protocol} (Model ${model})`);
+            
+            // ✅ 自动保存并结束向导
+            try {
+                // 直接保存品牌和型号
+                await devicesApi.setBrand(props.deviceId, protocol, model);
                 
-                // 跳转
-                activeStep.value = 1;
-            }, 1500);
+                setTimeout(() => {
+                    showSuccessToast('配置已保存');
+                    emit('completed');
+                    visible.value = false;
+                }, 1500);
+            } catch (e) {
+                showFailToast('保存配置失败');
+            }
+            // 不需要跳转 activeStep.value = 1;
             
         } else if (res.status === 'fail' || res.status === 'timeout') {
             isScanning.value = false;
@@ -263,7 +269,8 @@ const loadBrands = async () => {
 const parseBrandList = (list: any[]): BrandItem[] => {
     // 适配逻辑
     if (list.length > 0 && typeof list[0] === 'string') {
-        return list.map((name: string) => ({ name, models: [0] })); 
+        // ✅ 默认 Model 从 1 开始 (IRremote 库惯例)
+        return list.map((name: string) => ({ name, models: [1] })); 
     }
     return list;
 };

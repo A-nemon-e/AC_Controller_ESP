@@ -13,6 +13,7 @@ IRrecv IRController::irrecv(PIN_IR_RECV, IR_RECV_BUFFER_SIZE, IR_RECV_TIMEOUT,
 IRac IRController::ac(PIN_IR_SEND); // ✅ 新增：统一AC控制器
 decode_results IRController::results;
 void (*IRController::receiveCallback)(decode_results *) = nullptr;
+unsigned long IRController::lastSendTime = 0; // ✅ 初始化
 
 void IRController::init() {
   DEBUG_PRINTLN("[红外] 初始化红外模块");
@@ -44,6 +45,9 @@ bool IRController::sendRaw(const char *rawDataStr) {
 bool IRController::sendRaw(uint16_t *rawData, uint16_t length) {
   DEBUG_PRINTF("[红外] 发送%d个时序值\n", length);
 
+  // ✅ 记录发送时间，防止收到回声
+  lastSendTime = millis();
+
   // 发送原始数据（38kHz载波）
   irsend.sendRaw(rawData, length, IR_CARRIER_FREQ);
 
@@ -52,6 +56,11 @@ bool IRController::sendRaw(uint16_t *rawData, uint16_t length) {
 }
 
 void IRController::handleReceive() {
+  // ✅ 过滤自发自收的回声 (1.5秒盲区)
+  if (millis() - lastSendTime < SEND_IGNORE_WINDOW) {
+    return;
+  }
+
   if (irrecv.decode(&results)) {
     // 过滤重复码
     if (results.value == 0xFFFFFFFF || results.value == 0x0) {
@@ -132,6 +141,9 @@ bool IRController::sendBrand(const char *brand, int model, bool power,
                              bool swingV, bool swingH) {
   DEBUG_PRINTF("[红外] 发送品牌协议: %s (型号: %d)\n", brand, model);
 
+  // ✅ 记录发送时间，防止收到回声
+  lastSendTime = millis();
+
   // 1. 转换品牌字符串为协议类型
   decode_type_t protocol = stringToProtocol(brand);
   if (protocol == decode_type_t::UNKNOWN) {
@@ -201,7 +213,8 @@ decode_type_t IRController::stringToProtocol(const char *brand) {
 }
 
 String IRController::getSupportedBrandsJSON() {
-  StaticJsonDocument<2048> doc;
+  // ✅ 改为堆分配
+  DynamicJsonDocument doc(2048);
   JsonArray array = doc.to<JsonArray>();
 
   DEBUG_PRINTLN("[红外] 生成支持品牌列表...");

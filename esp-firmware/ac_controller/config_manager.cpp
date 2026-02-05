@@ -160,7 +160,7 @@ void ConfigManager::resetToDefault() {
 
   // ✅ 品牌配置：默认为空（未配置）
   config.brand[0] = '\0';
-  config.model = 0;
+  config.model = 1; // ✅ Default Model = 1 (IRremote standard)
 
   // 计算校验和
   config.checksum = calculateChecksum();

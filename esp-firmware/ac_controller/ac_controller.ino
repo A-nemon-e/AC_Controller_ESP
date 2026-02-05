@@ -178,7 +178,8 @@ void onIRReceived(decode_results *results) {
     DetectionResult result = AutoDetect::analyze(results);
 
     // 构建MQTT消息
-    StaticJsonDocument<2048> doc; // ✅ 增大Buffer，防止Raw Data截断
+    // ✅ 改为堆分配，防止Stack Smashing
+    DynamicJsonDocument doc(2048);
     doc["success"] = result.success;
     doc["protocol"] = result.protocol;
     doc["model"] = result.model;
@@ -199,11 +200,12 @@ void onIRReceived(decode_results *results) {
       DEBUG_PRINTLN("[主程序] ❌ 协议未识别，返回raw数据");
     }
 
-    char payload[2048]; // ✅ 增大Payload Buffer
+    // ✅ 改为String (堆分配)，防止Stack Overflow
+    String payload;
     serializeJson(doc, payload);
 
     String topic = MQTTClient::getTopic("auto_detect/result");
-    MQTTClient::publish(topic.c_str(), payload);
+    MQTTClient::publish(topic.c_str(), payload.c_str());
 
     // 自动停止检测
     AutoDetect::stop();
@@ -573,7 +575,8 @@ void handleSceneSaveCommand(const char *json) {
   DEBUG_PRINTLN("[主程序] → 收到场景保存指令");
 
   // 增大 buffer 以容纳 7 个场景的大 JSON
-  StaticJsonDocument<4096> doc;
+  // ✅ 改为堆分配 (4KB在栈上必挂)
+  DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, json);
 
   if (error) {

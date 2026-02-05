@@ -68,6 +68,10 @@ private:
 
   // ✅ 新增：品牌字符串转协议类型
   static decode_type_t stringToProtocol(const char *brand);
+
+  // ✅ 新增：自发自收过滤
+  static unsigned long lastSendTime;
+  static const unsigned long SEND_IGNORE_WINDOW = 1500; // 1.5秒忽略窗口
 };
 
 #endif // IR_CONTROLLER_H

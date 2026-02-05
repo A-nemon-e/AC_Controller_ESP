@@ -263,7 +263,7 @@ export class DevicesService {
         const topic = `ac/user_${userId}/dev_${device.uuid}/config`;
         this.mqttService.publish(topic, JSON.stringify({
             brand: brandId,
-            model: model ? parseInt(model) : 0
+            model: model ? parseInt(model) : 1 // ✅ Default Model = 1
         }));
 
         this.logger.log(`Device ${deviceId} brand set to ${brandId} ${model || ''}, config sent via MQTT`);

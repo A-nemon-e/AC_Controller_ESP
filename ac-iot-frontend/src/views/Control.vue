@@ -120,20 +120,57 @@
             应用设置
           </van-button>
         </div>
+        
+        <!-- ✅ 新增: Model 切换提示 -->
+        <div class="model-tip" @click="openModelSwitcher">
+          部分控制无效？点击此处切换 Model (当前: {{ config?.model || 1 }}) ➡️
+        </div>
       </van-cell-group>
     </template>
+
+    <!-- ✅ 新增: Model 切换面板 -->
+    <van-action-sheet v-model:show="showModelSheet" title="切换 Model">
+      <div class="model-sheet-content">
+        <div class="current-info">
+          <div>当前协议: <van-tag type="primary">{{ config?.brand || '未设置' }}</van-tag></div>
+          <div>当前 Model: <span class="model-id">{{ config?.model || 1 }}</span></div>
+        </div>
+
+        <div class="model-actions">
+           <van-button icon="arrow-left" @click="changeModel(-1)" :disabled="switchingModel" />
+           <van-button type="primary" @click="changeModel(1)" :loading="switchingModel">
+             测试下一 Model (+1)
+           </van-button>
+        </div>
+         
+        <div class="model-input-row">
+           <van-field v-model.number="customModelId" type="digit" label="指定ID" placeholder="输入ID" style="width: 150px" />
+           <van-button size="small" type="success" @click="applyCustomModel">应用</van-button>
+        </div>
+
+        <div class="sheet-tip">
+          提示: 不同 Model 对应同一品牌下的不同具体的红外编码格式。请逐个尝试直到空调响应。
+        </div>
+      </div>
+    </van-action-sheet>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import { useDevicesStore } from '@/stores/devices'
+
+const router = useRouter()
 import { devicesApi } from '@/api/devices'
 import type { DeviceState } from '@/types/device'
 
 const devicesStore = useDevicesStore()
 const sending = ref(false)
+const switchingModel = ref(false)
+const showModelSheet = ref(false)
+const customModelId = ref(1)
 
 const devices = computed(() => devicesStore.devices)
 const currentDevice = computed(() => devicesStore.currentDevice)
@@ -270,9 +307,55 @@ onMounted(() => {
 })
 
 // ✅ 新增：组件卸载时停止轮询
+// ✅ 新增：组件卸载时停止轮询
 onUnmounted(() => {
   stopPolling()
 })
+
+// ===== Model 切换逻辑 =====
+const openModelSwitcher = () => {
+  if (!config.value?.brand) {
+    showToast('请先在设置页配置品牌')
+    return
+  }
+  customModelId.value = config.value.model || 1
+  showModelSheet.value = true
+}
+
+const changeModel = async (delta: number) => {
+  if (!currentDevice.value || !config.value) return
+  
+  const newModel = (config.value.model || 1) + delta
+  if (newModel < 1) return
+
+  await doUpdateModel(newModel)
+}
+
+const applyCustomModel = async () => {
+  if (!customModelId.value || customModelId.value < 1) return
+  await doUpdateModel(customModelId.value)
+}
+
+const doUpdateModel = async (newModel: number) => {
+  if (!currentDevice.value || !config.value) return
+  
+  switchingModel.value = true
+  try {
+    await devicesApi.setBrand(currentDevice.value.id, config.value.brand, newModel)
+    showToast({ message: `已切换至 Model ${newModel}`, icon: 'success' })
+    
+    // 手动刷新一下状态
+    await devicesStore.fetchDeviceStatus(currentDevice.value.id)
+
+    // ✅ 新增：切换后自动发送当前指令进行测试 ("Touch-to-Test")
+    await devicesApi.sendCommand(currentDevice.value.id, command.value)
+
+  } catch (e) {
+    showToast('切换失败')
+  } finally {
+    switchingModel.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -357,5 +440,62 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.model-tip {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  padding: 10px 0 20px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.model-sheet-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.current-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.model-id {
+  color: #1989fa;
+  font-size: 20px;
+}
+
+.model-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.model-actions .van-button--primary {
+  flex: 1;
+}
+
+.model-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.sheet-tip {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.5;
 }
 </style>
