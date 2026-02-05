@@ -182,7 +182,11 @@ const brandSetup = computed(() => {
   if (!currentDevice.value?.brandConfig) return null
   try {
     const raw = currentDevice.value.brandConfig
-    return typeof raw === 'string' ? JSON.parse(raw) : raw
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return {
+        brand: parsed.brand || parsed.brandId, // ✅ 兼容 brandId
+        model: parsed.model
+    }
   } catch (e) {
     console.error('Failed to parse brandConfig:', e)
     return null
