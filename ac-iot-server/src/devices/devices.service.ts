@@ -429,6 +429,37 @@ export class DevicesService {
                 });
                 this.logger.log(`Learn Result for ${uuid} (key=${data.key}): ${data.success}`);
             }
+            // 4. ✅ 处理 status 状态上报 (Fixing Sync Issue)
+            else if (topic.endsWith('/status')) {
+                const data = JSON.parse(msgString);
+                // data: { power, mode, targetTemp, fan, swingV, swingH, temp, hum, current, ... }
+
+                // Update lastState
+                device.lastState = {
+                    ...device.lastState, // Keep existing fields
+                    power: data.power,
+                    mode: data.mode,
+                    setTemp: data.setTemp || data.targetTemp || device.lastState?.setTemp || 26, // Robust fallback
+                    fan: data.fan !== undefined ? (typeof data.fan === 'number' ? (data.fan === 0 ? 'auto' : 'low') : data.fan) : device.lastState?.fan, // Simple fan mapping fallback
+                    swingVertical: data.swingVertical,
+                    swingHorizontal: data.swingHorizontal,
+                    temp: data.temp,
+                    hum: data.hum,
+                    current: data.current
+                };
+
+                // Fan mapping enhancement if ESP sends numbers (0=auto, 1=low, 2=mid, 3=high)
+                if (typeof data.fan === 'number') {
+                    const fanMap = ['auto', 'low', 'mid', 'high'];
+                    if (data.fan >= 0 && data.fan < fanMap.length) {
+                        device.lastState.fan = fanMap[data.fan];
+                    }
+                }
+
+                await this.devicesRepository.save(device);
+                // Log only occasionally or debug
+                // this.logger.log(`Updated status for ${uuid}: ${JSON.stringify(device.lastState)}`);
+            }
 
         } catch (e) {
             this.logger.error(`Error processing MQTT message ${topic}: ${e.message}`);

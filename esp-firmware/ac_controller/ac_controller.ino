@@ -412,7 +412,15 @@ void handleControlCommand(const char *json) {
   // 解析空调状态参数
   bool power = doc["power"] | false;
   const char *mode = doc["mode"] | "cool";
-  uint8_t temp = doc["temp"] | 26;
+
+  // ✅ 修复: 优先使用 setTemp (新标准)，兼容 temp (旧标准)
+  uint8_t temp = 26;
+  if (doc.containsKey("setTemp")) {
+    temp = doc["setTemp"];
+  } else {
+    temp = doc["temp"] | 26;
+  }
+
   uint8_t fan = doc["fan"] | 0;
   bool swingV = doc["swingVertical"] | false;
   bool swingH = doc["swingHorizontal"] | false;
@@ -599,7 +607,14 @@ void handleSceneSaveCommand(const char *json) {
     const char *rawData = scene["raw"];
     bool power = scene["power"] | false;
     const char *mode = scene["mode"] | "cool";
-    uint8_t temp = scene["temp"] | 26;
+
+    // ✅ 优先 setTemp
+    uint8_t temp = 26;
+    if (scene.containsKey("setTemp")) {
+      temp = scene["setTemp"];
+    } else {
+      temp = scene["temp"] | 26;
+    }
 
     if (key && rawData) {
       if (SceneManager::addScene(key, rawData, power, mode, temp)) {
