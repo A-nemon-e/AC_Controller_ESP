@@ -3,6 +3,8 @@
     <!-- 设备管理 -->
     <van-cell-group inset title="设备管理">
         <van-cell
+          v-for="device in devices"
+          :key="device.id"
           :title="device.name"
           :label="`UUID: ${device.uuid}`"
           @click="viewDevice(device.id)"
