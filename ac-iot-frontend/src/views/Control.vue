@@ -450,9 +450,7 @@ const doUpdateModel = async (newModel: number) => {
   cursor: pointer;
   text-decoration: underline;
 }
-  cursor: pointer;
-  text-decoration: underline;
-}
+
 
 .model-sheet-content {
   padding: 20px;
