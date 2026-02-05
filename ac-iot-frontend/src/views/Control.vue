@@ -39,7 +39,7 @@
           <!-- 右侧：设定目标 + 发送 -->
           <div class="target-panel">
             <div class="label">设定温度</div>
-            <div class="value target-temp">{{ command.setTemp }}<span class="unit">°C</span></div>
+            <div class="value target-temp">{{ command.setTemp || 26 }}<span class="unit">°C</span></div>
             <van-button 
               type="primary" 
               size="small" 
@@ -318,7 +318,7 @@ watch(
       command.value = {
         power: state.power,
         mode: state.mode,
-        setTemp: state.setTemp,
+        setTemp: state.setTemp || command.value.setTemp || 26,
         fan: state.fan,
         swingVertical: state.swingVertical ?? false,
         swingHorizontal: state.swingHorizontal ?? false,
