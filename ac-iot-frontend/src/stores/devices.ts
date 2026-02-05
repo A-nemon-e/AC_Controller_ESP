@@ -49,9 +49,18 @@ export const useDevicesStore = defineStore('devices', () => {
     const fetchDeviceStatus = async (deviceId: number) => {
         try {
             const device = await devicesApi.getById(deviceId)
-            // 更新设备状态
-            if (device && device.lastState) {
-                updateDeviceStatus(deviceId, device.lastState)
+            if (device) {
+                // ✅ 更新列表中的设备数据（全量更新，包括 brandConfig）
+                const index = devices.value.findIndex((d) => d.id === deviceId)
+                if (index !== -1) {
+                    // 保留原有引用，更新属性
+                    Object.assign(devices.value[index], device)
+                }
+
+                // ✅ 如果是当前设备，也更新
+                if (currentDevice.value?.id === deviceId) {
+                    Object.assign(currentDevice.value, device)
+                }
             }
         } catch (error) {
             console.error('Failed to fetch device status:', error)

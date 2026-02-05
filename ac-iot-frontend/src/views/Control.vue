@@ -315,8 +315,15 @@ watch(
 
 // ✅ 新增：组件挂载时启动轮询
 onMounted(() => {
+  console.log('Control.vue mounted, currentDevice:', currentDevice.value);
   startPolling()
 })
+
+watch(currentDevice, (val) => {
+    console.log('Control.vue currentDevice updated:', val);
+    console.log('brandConfig raw:', val?.brandConfig);
+    console.log('brandSetup computed:', brandSetup.value);
+}, { deep: true });
 
 // ✅ 新增：组件卸载时停止轮询
 // ✅ 新增：组件卸载时停止轮询
