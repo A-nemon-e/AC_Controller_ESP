@@ -153,11 +153,6 @@
         </div>
       </div>
     </van-action-sheet>
-    
-    <!-- DEBUG INFO -->
-    <div style="text-align: center; margin-top: 20px; color: #ccc; font-size: 10px;">
-        Debug: {{ JSON.stringify(brandSetup) }}
-    </div>
   </div>
 </template>
 
