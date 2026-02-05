@@ -59,6 +59,7 @@ export class MqttService implements OnModuleInit {
             'ac/+/+/learn/result',     // 学习结果
             'ac/+/+/auto_detect/#',    // 自动检测（状态+结果）
             'ac/discovery/#',          // 设备发现
+            'ac/+/+/brands/list',      // ✅ 品牌列表响应
         ];
 
         topicPatterns.forEach(pattern => {

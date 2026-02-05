@@ -196,66 +196,31 @@ bool IRController::sendBrand(const char *brand, int model, bool power,
 }
 
 decode_type_t IRController::stringToProtocol(const char *brand) {
-  // 转换品牌字符串为IRremoteESP8266协议类型
-  if (strcmp(brand, "GREE") == 0)
-    return decode_type_t::GREE;
-  if (strcmp(brand, "MIDEA") == 0)
-    return decode_type_t::MIDEA;
-  if (strcmp(brand, "DAIKIN") == 0)
-    return decode_type_t::DAIKIN;
-  if (strcmp(brand, "HAIER") == 0 || strcmp(brand, "HAIER_AC") == 0)
-    return decode_type_t::HAIER_AC;
-  if (strcmp(brand, "MITSUBISHI") == 0 || strcmp(brand, "MITSUBISHI_AC") == 0)
-    return decode_type_t::MITSUBISHI_AC;
-  if (strcmp(brand, "PANASONIC") == 0 || strcmp(brand, "PANASONIC_AC") == 0)
-    return decode_type_t::PANASONIC_AC;
-  if (strcmp(brand, "SAMSUNG") == 0 || strcmp(brand, "SAMSUNG_AC") == 0)
-    return decode_type_t::SAMSUNG_AC;
-  if (strcmp(brand, "LG") == 0)
-    return decode_type_t::LG;
-  if (strcmp(brand, "FUJITSU") == 0 || strcmp(brand, "FUJITSU_AC") == 0)
-    return decode_type_t::FUJITSU_AC;
-  if (strcmp(brand, "TCL") == 0 || strcmp(brand, "TCL112AC") == 0)
-    return decode_type_t::TCL112AC;
-  if (strcmp(brand, "COOLIX") == 0)
-    return decode_type_t::COOLIX;
-  if (strcmp(brand, "TOSHIBA") == 0 || strcmp(brand, "TOSHIBA_AC") == 0)
-    return decode_type_t::TOSHIBA_AC;
-  if (strcmp(brand, "WHIRLPOOL") == 0 || strcmp(brand, "WHIRLPOOL_AC") == 0)
-    return decode_type_t::WHIRLPOOL_AC;
-  if (strcmp(brand, "TECO") == 0)
-    return decode_type_t::TECO;
-  if (strcmp(brand, "SHARP") == 0 || strcmp(brand, "SHARP_AC") == 0)
-    return decode_type_t::SHARP_AC;
-  if (strcmp(brand, "HITACHI") == 0 || strcmp(brand, "HITACHI_AC") == 0)
-    return decode_type_t::HITACHI_AC;
-  if (strcmp(brand, "ELECTRA") == 0 || strcmp(brand, "ELECTRA_AC") == 0)
-    return decode_type_t::ELECTRA_AC;
-  if (strcmp(brand, "CARRIER") == 0 || strcmp(brand, "CARRIER_AC") == 0)
-    return decode_type_t::CARRIER_AC;
-  if (strcmp(brand, "CORONA") == 0 || strcmp(brand, "CORONA_AC") == 0)
-    return decode_type_t::CORONA_AC;
-  if (strcmp(brand, "KELON") == 0)
-    return decode_type_t::KELON;
-  if (strcmp(brand, "KELVINATOR") == 0)
-    return decode_type_t::KELVINATOR;
-  if (strcmp(brand, "NEOCLIMA") == 0)
-    return decode_type_t::NEOCLIMA;
-  if (strcmp(brand, "ARGO") == 0)
-    return decode_type_t::ARGO;
-  if (strcmp(brand, "GOODWEATHER") == 0)
-    return decode_type_t::GOODWEATHER;
-  if (strcmp(brand, "AMCOR") == 0)
-    return decode_type_t::AMCOR;
-  if (strcmp(brand, "AIRWELL") == 0)
-    return decode_type_t::AIRWELL;
-  if (strcmp(brand, "VESTEL") == 0 || strcmp(brand, "VESTEL_AC") == 0)
-    return decode_type_t::VESTEL_AC;
-  if (strcmp(brand, "VOLTAS") == 0)
-    return decode_type_t::VOLTAS;
-  if (strcmp(brand, "YORK") == 0)
-    return decode_type_t::YORK;
+  // ✅ 优化：直接使用 IRremoteESP8266 库提供的转换函数
+  return strToDecodeType(brand);
+}
 
-  DEBUG_PRINTF("[红外] ⚠️ 未知品牌: %s\n", brand);
-  return decode_type_t::UNKNOWN;
+String IRController::getSupportedBrandsJSON() {
+  StaticJsonDocument<2048> doc;
+  JsonArray array = doc.to<JsonArray>();
+
+  DEBUG_PRINTLN("[红外] 生成支持品牌列表...");
+
+  // 遍历所有可能的协议ID (kLastDecodeType from IRremoteESP8266.h)
+  for (int i = 1; i <= kLastDecodeType; i++) {
+    decode_type_t protocol = (decode_type_t)i;
+
+    // 检查是否为空调协议
+    if (IRac::isProtocolSupported(protocol)) {
+      String name = typeToString(protocol);
+      name.toUpperCase(); // 统一转大写
+      array.add(name);
+    }
+  }
+
+  String jsonString;
+  serializeJson(doc, jsonString);
+
+  DEBUG_PRINTF("[红外] 支持 %d 个品牌\n", array.size());
+  return jsonString;
 }

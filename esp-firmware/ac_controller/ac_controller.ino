@@ -381,6 +381,15 @@ void onMQTTMessage(char *topic, uint8_t *payload, unsigned int length) {
 
   } else if (topicStr.endsWith("/auto_detect")) {
     handleAutoDetectCommand(message);
+
+  } else if (topicStr.endsWith("/brands/get")) { // ✅ 新增：获取品牌列表
+    DEBUG_PRINTLN("[主程序] → 请求品牌列表");
+    String json = IRController::getSupportedBrandsJSON();
+    String topic = MQTTClient::getTopic("brands/list");
+    MQTTClient::publish(topic.c_str(), json.c_str());
+
+  } else if (topicStr.endsWith("/scene/save")) { // ✅ 新增：批量保存场景
+    handleSceneSaveCommand(message);
   }
 }
 
@@ -405,7 +414,23 @@ void handleControlCommand(const char *json) {
   bool swingV = doc["swingVertical"] | false;
   bool swingH = doc["swingHorizontal"] | false;
 
-  // ===== ✅ 优先级1: 品牌协议模式 =====
+  // ===== ✅ 优先级0: 临时指令 (Ephemeral Command) =====
+  if (doc.containsKey("brand")) {
+    const char *ephBrand = doc["brand"];
+    int ephModel = doc["model"] | 1; // 默认 Model 1
+    DEBUG_PRINTF("[主程序] 收到临时测试指令: %s (Model=%d)\n", ephBrand,
+                 ephModel);
+
+    if (IRController::sendBrand(ephBrand, ephModel, power, mode, temp, fan,
+                                swingV, swingH)) {
+      DEBUG_PRINTLN("[主程序] ✅ 临时指令发送成功");
+      return;
+    } else {
+      DEBUG_PRINTLN("[主程序] ❌ 临时指令发送失败 (不支持的协议?)");
+    }
+  }
+
+  // ===== ✅ 优先级1: 品牌协议模式 (EEPROM配置) =====
   DeviceConfig &cfg = ConfigManager::getConfig();
   if (cfg.brand[0] != '\0') { // 如果配置了品牌
     DEBUG_PRINTF("[主程序] 使用品牌协议: %s\n", cfg.brand);
@@ -540,6 +565,53 @@ void handleAutoDetectCommand(const char *json) {
 
     DEBUG_PRINTLN("[自动检测] ⏹ 已停止");
   }
+  DEBUG_PRINTLN("[自动检测] ⏹ 已停止");
+}
+}
+
+// ===== 处理场景批量保存 (Front-end Wizard) =====
+void handleSceneSaveCommand(const char *json) {
+  DEBUG_PRINTLN("[主程序] → 收到场景保存指令");
+
+  // 增大 buffer 以容纳 7 个场景的大 JSON
+  StaticJsonDocument<4096> doc;
+  DeserializationError error = deserializeJson(doc, json);
+
+  if (error) {
+    DEBUG_PRINTLN("[场景保存] ❌ JSON解析失败");
+    return;
+  }
+
+  JsonArray scenes = doc["scenes"];
+  if (scenes.isNull()) {
+    DEBUG_PRINTLN("[场景保存] ❌ 缺少 scenes 数组");
+    return;
+  }
+
+  DEBUG_PRINTLN("[场景保存] 清空旧场景...");
+  SceneManager::clearScenes();
+
+  int successCount = 0;
+  for (JsonObject scene : scenes) {
+    const char *key = scene["key"];
+    const char *rawData = scene["raw"];
+    bool power = scene["power"] | false;
+    const char *mode = scene["mode"] | "cool";
+    uint8_t temp = scene["temp"] | 26;
+
+    if (key && rawData) {
+      if (SceneManager::addScene(key, rawData, power, mode, temp)) {
+        successCount++;
+        DEBUG_PRINTF("[场景保存] 已保存: %s\n", key);
+      }
+    }
+  }
+
+  DEBUG_PRINTF("[场景保存] ✅ 成功保存 %d 个场景\n", successCount);
+
+  // 发送确认 (可选)
+  // String topic = MQTTClient::getTopic("scene/save_ack");
+  // MQTTClient::publish(topic.c_str(), "{\"status\":\"ok\"}");
 }
 
 // ===== 发送设备上线消息（用于设备发现）=====
@@ -565,7 +637,8 @@ void publishDeviceAnnounce() {
 
     // 发布到 ac/discovery/<UUID>
     String topic = "ac/discovery/" + String(cfg.deviceUUID);
-    MQTTClient::publish(topic.c_str(), payload, true); // ✅ 设为 Retained 消息
+    MQTTClient::publish(topic.c_str(), payload,
+                        false); // ✅ 取消 Retained (User Request)
 
     DEBUG_PRINTLN("[设备发现] ✅ 上线消息已发送");
     DEBUG_PRINTF("[设备发现] Topic: %s\n", topic.c_str());

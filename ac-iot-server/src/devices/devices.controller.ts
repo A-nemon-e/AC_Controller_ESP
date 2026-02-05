@@ -170,35 +170,45 @@ export class DevicesController {
         return this.devicesService.startLearnAll(req.user.userId, id, dto.keys);
     }
 
+    @Get(':id/setup/learn-result')
+    async getLearningResult(
+        @Request() req: any,
+        @Param('id', ParseIntPipe) id: number
+    ) {
+        return this.devicesService.getLearningResult(id); // 服务层方法不需要userId，因为只是查询缓存，且learn过程本身有权限校验
+    }
+
     @Post(':id/setup/complete')
     completeSetup(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
         return this.devicesService.completeSetup(req.user.userId, id);
     }
 
-    // ===== ✅ 品牌协议支持 =====
+    // ===== ✅ 品牌协议支持 (Dynamic Firmware Discovery) =====
 
+    @Get(':id/setup/brands')
+    async getDeviceSupportedBrands(
+        @Request() req: any,
+        @Param('id', ParseIntPipe) id: number
+    ) {
+        return this.devicesService.getSupportedBrands(req.user.userId, id);
+    }
+
+    @Post(':id/setup/save-scenes')
+    async saveScenes(
+        @Request() req: any,
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: { scenes: any[] }
+    ) {
+        return this.devicesService.saveScenes(req.user.userId, id, body.scenes);
+    }
+
+    // (保留旧接口作为Fallback，或标记为 deprecated)
     @Get('brands')
-    getSupportedBrands() {
+    getLegacySupportedBrands() {
         return {
             brands: [
-                { id: 'GREE', name: '格力', models: [0, 1, 2] },
-                { id: 'MIDEA', name: '美的', models: [0, 1] },
-                { id: 'DAIKIN', name: '大金', models: [0, 1, 2, 3] },
-                { id: 'HAIER', name: '海尔', models: [0, 1] },
-                { id: 'MITSUBISHI', name: '三菱', models: [0, 1] },
-                { id: 'PANASONIC', name: '松下', models: [0, 1] },
-                { id: 'SAMSUNG', name: '三星', models: [0] },
-                { id: 'LG', name: 'LG', models: [0, 1] },
-                { id: 'FUJITSU', name: '富士通', models: [0, 1] },
-                { id: 'TCL', name: 'TCL', models: [0] },
-                { id: 'HISENSE', name: '海信', models: [0] },
-                { id: 'COOLIX', name: '奥克斯', models: [0] },
-                { id: 'TOSHIBA', name: '东芝', models: [0, 1] },
-                { id: 'WHIRLPOOL', name: '惠而浦', models: [0] },
-                { id: 'SHARP', name: '夏普', models: [0, 1] },
-                { id: 'HITACHI', name: '日立', models: [0, 1, 2, 3] },
-                { id: 'CARRIER', name: '开利', models: [0, 1] },
-                { id: 'YORK', name: '约克', models: [0] },
+                { id: 'GREE', name: '格力 (Fallback)', models: [0] },
+                // ... legacy list
             ]
         };
     }

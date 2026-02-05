@@ -48,4 +48,18 @@ export const devicesApi = {
 
     getAutoDetectStatus: (id: number) =>
         apiClient.get(`/devices/${id}/auto-detect/status`),
+
+    // 获取动态品牌列表 (Setup)
+    getSetupBrands: (id: number) =>
+        apiClient.get<{ status: 'ready' | 'loading'; brands: string[] | any[] }>(
+            `/devices/${id}/setup/brands`
+        ),
+
+    // 批量保存场景
+    saveScenes: (id: number, scenes: any[]) =>
+        apiClient.post(`/devices/${id}/setup/save-scenes`, { scenes }),
+
+    // 获取学习结果 (Polling)
+    getLearningResult: (id: number) =>
+        apiClient.get(`/devices/${id}/setup/learn-result`),
 }

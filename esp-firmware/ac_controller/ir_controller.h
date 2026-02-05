@@ -49,6 +49,9 @@ public:
   // 设置接收回调
   static void setReceiveCallback(void (*callback)(decode_results *));
 
+  // ✅ 新增：获取支持的品牌列表JSON
+  static String getSupportedBrandsJSON();
+
 private:
   static IRsend irsend;
   static IRrecv irrecv;

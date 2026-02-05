@@ -2,14 +2,18 @@
   <div class="settings-page">
     <!-- 设备管理 -->
     <van-cell-group inset title="设备管理">
-      <van-cell
-        v-for="device in devices"
-        :key="device.id"
-        :title="device.name"
-        :label="`UUID: ${device.uuid}`"
-        is-link
-        @click="viewDevice(device.id)"
-      />
+      <van-swipe-cell v-for="device in devices" :key="device.id">
+        <van-cell
+          :title="device.name"
+          :label="`UUID: ${device.uuid}`"
+          is-link
+          @click="viewDevice(device.id)"
+        />
+        <template #right>
+          <van-button square type="primary" text="配置" @click="openSetup(device)" />
+          <van-button square type="danger" text="删除" @click="confirmDelete(device)" />
+        </template>
+      </van-swipe-cell>
       <van-cell title="添加新设备" is-link icon="plus" @click="showAddDevice = true" />
     </van-cell-group>
 
@@ -23,6 +27,15 @@
       <van-cell title="版本" value="1.0.0" />
       <van-cell title="作者" value="AC IoT Team" />
     </van-cell-group>
+
+    <!-- 智能配置向导 -->
+    <SmartSetupWizard 
+      v-if="currentSetupDevice"
+      v-model="showSetupWizard"
+      :device-id="currentSetupDevice.id"
+      :user-id="authStore.user?.id || 0"
+      @completed="onSetupCompleted"
+    />
 
     <!-- 添加设备弹出层 -->
     <van-popup v-model:show="showAddDevice" position="bottom" :style="{ height: '50%' }">
@@ -95,11 +108,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast, showConfirmDialog } from 'vant'
+import { showToast, showConfirmDialog, SwipeCell as VanSwipeCell } from 'vant' // Import SwipeCell locally
 import { useAuthStore } from '@/stores/auth'
 import { useDevicesStore } from '@/stores/devices'
 import { devicesApi } from '@/api/devices'
-import type { DiscoveredDevice } from '@/types/device'
+import type { DiscoveredDevice, Device } from '@/types/device'
+import SmartSetupWizard from '@/components/SmartSetupWizard.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -111,6 +125,9 @@ const showDiscovery = ref(false)
 const adding = ref(false)
 const discovering = ref(false)
 const discoveredDevices = ref<DiscoveredDevice[]>([])
+
+const showSetupWizard = ref(false)
+const currentSetupDevice = ref<Device | null>(null)
 
 const newDevice = ref({
   uuid: '',
@@ -125,6 +142,30 @@ const viewDevice = (id: number) => {
   }
 }
 
+const openSetup = (device: Device) => {
+  currentSetupDevice.value = device
+  showSetupWizard.value = true
+}
+
+const onSetupCompleted = () => {
+  showToast('设置已更新')
+  // Optional: refresh device config
+}
+
+const confirmDelete = async (device: Device) => {
+    try {
+        await showConfirmDialog({
+            title: '确认删除',
+            message: `确定要删除设备 "${device.name}" 吗？删除后设备将重置。`
+        });
+        await devicesApi.delete(device.id);
+        showToast('设备已删除');
+        await devicesStore.fetchDevices();
+    } catch {
+        // Cancel
+    }
+}
+
 const handleLogout = async () => {
   try {
     await showConfirmDialog({ message: '确认退出登录？' })
@@ -136,30 +177,29 @@ const handleLogout = async () => {
 }
 
 const onAddDevice = async () => {
-  adding.value = true
-  try {
-    const device = await devicesApi.create(newDevice.value)
-    if (device) {
-      devicesStore.addDevice(device)
-      showToast('添加成功')
-      showAddDevice.value = false
-      newDevice.value = { uuid: '', name: '' }
-    } else {
-      throw new Error('API returned invalid device data')
+    // ... same as before
+    adding.value = true
+    try {
+        const device = await devicesApi.create(newDevice.value)
+        if (device) {
+            devicesStore.addDevice(device)
+            showToast('添加成功')
+            showAddDevice.value = false
+            newDevice.value = { uuid: '', name: '' }
+        }
+    } catch (error: any) {
+        showToast(error.message || '添加失败')
+    } finally {
+        adding.value = false
     }
-  } catch (error: any) {
-    console.error('Add device failed:', error)
-    showToast(error.message || '添加失败')
-  } finally {
-    adding.value = false
-  }
 }
+
+// ... rest of the functions (refreshDiscovery, addDiscoveredDevice) remain the same
 
 const refreshDiscovery = async () => {
   discovering.value = true
   try {
     const result = await devicesApi.getDiscoveredDevices()
-    // 确保 devices 是数组
     const devices = (result && Array.isArray(result.devices)) ? result.devices : []
     discoveredDevices.value = devices
     
@@ -169,8 +209,7 @@ const refreshDiscovery = async () => {
       showToast(`发现 ${devices.length} 个设备`)
     }
   } catch (error) {
-    console.error('Discovery failed:', error)
-    discoveredDevices.value = [] // 出错时重置为空数组
+    discoveredDevices.value = []
     showToast('扫描失败')
   } finally {
     discovering.value = false
@@ -186,19 +225,16 @@ const addDiscoveredDevice = async (device: DiscoveredDevice) => {
     const newDev = await devicesApi.create({ 
       uuid: device.uuid, 
       name,
-      mac: device.mac, // ✅ 传递 MAC 地址
-      ip: device.ip    // ✅ 传递 IP 地址
+      mac: device.mac,
+      ip: device.ip
     })
     if (newDev) {
       devicesStore.addDevice(newDev)
       showToast('添加成功')
       showDiscovery.value = false
       await devicesStore.fetchDevices()
-    } else {
-       throw new Error('API returned invalid device data')
     }
   } catch (error: any) {
-    console.error('Add discovered device failed:', error)
     showToast(error.message || '添加失败')
   } finally {
     adding.value = false
@@ -234,5 +270,10 @@ onMounted(() => {
 
 .discovery-panel .van-button {
   margin-bottom: 16px;
+}
+
+/* Fix SwipeCell button height */
+.van-swipe-cell__right .van-button {
+  height: 100%;
 }
 </style>

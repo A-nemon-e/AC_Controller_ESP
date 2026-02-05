@@ -29,6 +29,10 @@ export class Device {
     @Column({ default: 'uninitialized' })
     setupStatus: string; // 'uninitialized' | 'brand_selected' | 'learning' | 'ready'
 
+    // 缓存固件支持的品牌列表 (From 'brands/list')
+    @Column('simple-json', { nullable: true })
+    supportedBrands: string[];
+
     // 电流互感器开关
     @Column({ default: false })
     enableCurrent: boolean;

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Device } from './device.entity';
@@ -346,17 +347,193 @@ export class DevicesService {
         };
     }
 
+    // 暂存自动检测状态 (Memory Cache)
+    // Key: deviceId, Value: { status: 'idle'|'detecting'|'success'|'fail', result?: any, timestamp: number }
+    private autoDetectStates = new Map<number, any>();
+
+    // 暂存学习结果 (Memory Cache)
+    // Key: deviceId, Value: { status: 'learning'|'success'|'timeout', key: string, raw?: string, timestamp: number }
+    private learningStates = new Map<number, any>();
+
     /**
-     * 获取自动检测状态
-     * 注意：这是一个临时方法，实际状态应该通过WebSocket推送
+     * ✅ MQTT 消息监听 (处理 brands/list, auto_detect, learn)
+     */
+    @OnEvent('mqtt.message')
+    async handleMqttMessage(event: { topic: string, payload: any }) {
+        const { topic, payload } = event;
+        const msgString = payload.toString();
+
+        try {
+            // 解析 UUID (假设 topic结构固定: ac/user_X/dev_UUID/...)
+            const parts = topic.split('/');
+            const uuidPart = parts.find(p => p.startsWith('dev_'));
+            if (!uuidPart) return;
+            const uuid = uuidPart.replace('dev_', '');
+
+            // 查找对应的 Device ID (为了更新 memory cache)
+            // 注意：频繁查库可能影响性能，这只是一个简单实现。
+            // 生产环境可以维护 uuid -> id 的映射
+            const device = await this.devicesRepository.findOne({ where: { uuid } });
+            if (!device) return;
+
+            // 1. 处理 brands/list 响应
+            if (topic.endsWith('/brands/list')) {
+                const data = JSON.parse(msgString);
+                let brands: string[] = [];
+                if (Array.isArray(data)) {
+                    brands = data;
+                } else if (data.protocols) {
+                    brands = data.protocols;
+                } else if (data.brands) {
+                    brands = data.brands;
+                }
+
+                if (brands.length > 0) {
+                    device.supportedBrands = brands;
+                    await this.devicesRepository.save(device);
+                    this.logger.log(`Updated supportedBrands for ${uuid}: ${brands.length} protocols`);
+                }
+            }
+            // 2. 处理 auto_detect 状态/结果
+            else if (topic.includes('/auto_detect/')) {
+                const data = JSON.parse(msgString);
+
+                if (topic.endsWith('/status')) {
+                    // Update Status
+                    const current = this.autoDetectStates.get(device.id) || {};
+                    this.autoDetectStates.set(device.id, {
+                        ...current,
+                        status: data.status, // detecting, idle
+                        message: data.message,
+                        timestamp: Date.now()
+                    });
+                } else if (topic.endsWith('/result')) {
+                    // Update Result
+                    this.autoDetectStates.set(device.id, {
+                        status: data.success ? 'success' : 'fail',
+                        result: data,
+                        timestamp: Date.now()
+                    });
+                    this.logger.log(`Auto Detect Result for ${uuid}: ${data.success}`);
+                }
+            }
+            // 3. 处理 learn/result
+            else if (topic.endsWith('/learn/result')) {
+                const data = JSON.parse(msgString);
+                // Schema: { key, raw, success, error? }
+                this.learningStates.set(device.id, {
+                    status: data.success ? 'success' : 'timeout',
+                    key: data.key,
+                    raw: data.raw,
+                    timestamp: Date.now()
+                });
+                this.logger.log(`Learn Result for ${uuid} (key=${data.key}): ${data.success}`);
+            }
+
+        } catch (e) {
+            this.logger.error(`Error processing MQTT message ${topic}: ${e.message}`);
+        }
+    }
+
+    /**
+     * 获取自动检测状态 (Real Implementation)
      */
     async getAutoDetectStatus(deviceId: number) {
-        // 简单返回，实际状态通过MQTT uplink和WebSocket维护
+        const state = this.autoDetectStates.get(deviceId);
+
+        // 如果没有状态，默认返回 idle
+        if (!state) {
+            return {
+                deviceId,
+                status: 'idle',
+                timestamp: Date.now()
+            };
+        }
+
+        // 如果状态太旧 (比如超过 2 分钟)，重置为 idle
+        if (Date.now() - state.timestamp > 120000) {
+            this.autoDetectStates.delete(deviceId);
+            return {
+                deviceId,
+                status: 'idle',
+                timestamp: Date.now()
+            };
+        }
+
         return {
             deviceId,
-            status: 'idle',  // 默认空闲状态
-            note: '实际状态请通过WebSocket订阅'
+            ...state
         };
+    }
+
+    /**
+     * 获取设备支持的品牌列表 (Dynamic)
+     */
+    async getSupportedBrands(userId: number, deviceId: number) {
+        const device = await this.devicesRepository.findOne({ where: { id: deviceId } });
+        if (!device) throw new NotFoundException('Device not found');
+        if (device.userId !== userId) throw new ForbiddenException('Access denied');
+
+        // 如果已有缓存的品牌列表，且不为空，直接返回
+        if (device.supportedBrands && device.supportedBrands.length > 0) {
+            return { status: 'ready', brands: device.supportedBrands };
+        }
+
+        // 如果为空，触发一次查询 (MQTT Request)
+        const topic = `ac/user_${userId}/dev_${device.uuid}/brands/get`;
+        // 防止短时间频繁触发? 简单起见，每次前端轮询都发一次也行，或者加个内存节流。
+        // 这里假设前端轮询间隔 1.5s，是可以接受的。
+        this.mqttService.publish(topic, JSON.stringify({}));
+
+        return { status: 'loading', brands: [] };
+    }
+
+    /**
+     * 保存录制的场景 (更新 IR Config)
+     */
+    async saveScenes(userId: number, deviceId: number, scenes: any[]) {
+        const device = await this.devicesRepository.findOne({ where: { id: deviceId } });
+        if (!device) throw new NotFoundException('Device not found');
+        if (device.userId !== userId) throw new ForbiddenException('Access denied');
+
+        if (!device.irConfig) device.irConfig = {};
+
+        // Merge scenes
+        for (const scene of scenes) {
+            // scene: { key: 'cool_26', raw: '...' }
+            if (scene.key && scene.raw) {
+                device.irConfig[scene.key] = scene.raw;
+            }
+        }
+
+        // 标记 Setup 状态
+        if (Object.keys(device.irConfig).length > 0) {
+            device.setupStatus = 'ready';
+        }
+
+        await this.devicesRepository.save(device);
+        this.logger.log(`Saved ${scenes.length} scenes for device ${deviceId}`);
+
+        return { success: true };
+    }
+
+    /**
+     * ✅ 新增：获取学习结果 (Polling Interface)
+     */
+    async getLearningResult(deviceId: number) {
+        const state = this.learningStates.get(deviceId);
+
+        if (!state) {
+            return { status: 'waiting' };
+        }
+
+        // 简短缓存 (1分钟过期)
+        if (Date.now() - state.timestamp > 60000) {
+            this.learningStates.delete(deviceId);
+            return { status: 'waiting' }; // 过期视为无数据
+        }
+
+        return state;
     }
 
     /**
@@ -364,11 +541,7 @@ export class DevicesService {
      * 发送到: ac/user_0/dev_{uuid}/config/update 确保未绑定设备能收到
      */
     private async pushDeviceConfig(device: Device) {
-        // 注意：这里我们特意发送到 user_0 的topic，因为未绑定的设备监听的是这个
-        // 如果设备已经绑定过（比如改绑），它可能监听的是旧用户的topic
-        // 为了稳健性，我们可以同时发送到 user_0 和 user_{current} (如果未来支持)
-
-        // 策略：发送到 user_0 (针对新设备)
+        // ... (保持原样)
         const topicUnbound = `ac/user_0/dev_${device.uuid}/config/update`;
 
         const payload = {
@@ -382,9 +555,5 @@ export class DevicesService {
         // 发送给未绑定状态的Topic
         this.mqttService.publish(topicUnbound, payloadStr);
         this.logger.log(`Pushed bind config to ${topicUnbound}: ${payloadStr}`);
-
-        // 也可以尝试发送到当前用户的Topic (如果设备已经部分配置过)
-        // const topicBound = `ac/user_${device.userId}/dev_${device.uuid}/config/update`;
-        // this.mqttService.publish(topicBound, payloadStr);
     }
 }

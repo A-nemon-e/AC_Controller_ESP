@@ -24,4 +24,12 @@ export class AcCommandDto {
     @IsBoolean()
     @IsOptional()
     swingHorizontal?: boolean;
+
+    @IsString()
+    @IsOptional()
+    brand?: string; // 临时指令品牌
+
+    @IsNumber()
+    @IsOptional()
+    model?: number; // 临时指令型号
 }
