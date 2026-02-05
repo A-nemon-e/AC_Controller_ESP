@@ -8,7 +8,11 @@
           :label="`UUID: ${device.uuid}`"
           is-link
           @click="viewDevice(device.id)"
-        />
+        >
+          <template #extra>
+             <van-icon name="setting-o" size="24" color="#1989fa" @click.stop="openSetup(device)" style="margin-right: 15px; z-index: 10;" />
+          </template>
+        </van-cell>
         <template #right>
           <van-button square type="primary" text="配置" @click="openSetup(device)" />
           <van-button square type="danger" text="删除" @click="confirmDelete(device)" />
