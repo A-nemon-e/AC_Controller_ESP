@@ -46,27 +46,17 @@
                     <div v-else class="brand-list">
                         <van-empty v-if="filteredBrands.length === 0" description="未找到匹配品牌" />
                         
-                        <van-collapse v-model="activeBrandNames" accordion>
-                            <van-collapse-item v-for="brand in filteredBrands" :key="brand.name" :name="brand.name">
-                                <template #title>
-                                    <div class="brand-title">
-                                        <span class="brand-name">{{ brand.name }}</span>
-                                        <van-tag type="primary" plain>{{ brand.models.length }} 个型号</van-tag>
-                                    </div>
-                                </template>
-                                
-                                <div class="model-grid">
-                                    <div v-for="model in brand.models" :key="model" 
-                                        class="model-item" 
-                                        :class="{ active: selectedBrand?.name === brand.name && selectedBrand?.model === model }"
-                                        @click="testModel(brand.name, model)">
-                                        <span class="model-label">型号 {{ model }}</span>
-                                        <van-icon name="play-circle-o" class="play-icon" />
-                                    </div>
-                                </div>
-                                <p class="test-tip">点击型号立即发送测试指令 (制冷 26°C)</p>
-                            </van-collapse-item>
-                        </van-collapse>
+                        <!-- ✅ 扁平化展示：只展示品牌，默认 Model 1 -->
+                        <div class="model-grid">
+                            <div v-for="brand in filteredBrands" :key="brand.name" 
+                                class="model-item" 
+                                :class="{ active: selectedBrand?.name === brand.name }"
+                                @click="testModel(brand.name, 1)"> <!-- 👈 强制 Model 1 -->
+                                <span class="model-label">{{ brand.name }}</span>
+                                <van-icon name="play-circle-o" class="play-icon" />
+                            </div>
+                        </div>
+                        <p class="test-tip">点击品牌立即发送测试指令 (使用默认 Model 1)</p>
                     </div>
                 </div>
 
