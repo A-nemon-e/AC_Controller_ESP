@@ -186,12 +186,18 @@ bool MQTTClient::reconnect() {
     String cmdTopic = getTopic("cmd");
     String learnTopic = getTopic("learn/start");
     String configTopic = getTopic("config");
-    String configUpdateTopic = getTopic("config/update"); // ✅ 新增
+    String configUpdateTopic = getTopic("config/update");
+    String autoDetectTopic = getTopic("auto_detect"); // ✅ 新增
+    String brandsGetTopic = getTopic("brands/get");   // ✅ 新增
+    String sceneSaveTopic = getTopic("scene/save");   // ✅ 新增
 
     subscribe(cmdTopic.c_str());
     subscribe(learnTopic.c_str());
     subscribe(configTopic.c_str());
-    subscribe(configUpdateTopic.c_str()); // ✅ 新增
+    subscribe(configUpdateTopic.c_str());
+    subscribe(autoDetectTopic.c_str()); // ✅
+    subscribe(brandsGetTopic.c_str());  // ✅
+    subscribe(sceneSaveTopic.c_str());  // ✅
 
     // 发布上线消息
     String statusTopic = getTopic("status");
@@ -228,11 +234,17 @@ void MQTTClient::resubscribe() {
   String learnTopic = getTopic("learn/start");
   String configTopic = getTopic("config");
   String configUpdateTopic = getTopic("config/update");
+  String autoDetectTopic = getTopic("auto_detect"); // ✅ 新增
+  String brandsGetTopic = getTopic("brands/get");   // ✅ 新增
+  String sceneSaveTopic = getTopic("scene/save");   // ✅ 新增
 
   subscribe(cmdTopic.c_str());
   subscribe(learnTopic.c_str());
   subscribe(configTopic.c_str());
   subscribe(configUpdateTopic.c_str());
+  subscribe(autoDetectTopic.c_str()); // ✅
+  subscribe(brandsGetTopic.c_str());  // ✅
+  subscribe(sceneSaveTopic.c_str());  // ✅
 
   DEBUG_PRINTLN("[MQTT] ✅ 重新订阅完成");
 }

@@ -76,8 +76,11 @@
                     
                     <div class="scene-list">
                         <div v-for="(scene, index) in scenes" :key="index" class="scene-item">
-                            <div class="scene-info">
-                                <div class="scene-name">{{ scene.name }}</div>
+                            <div class="scene-info" @click="openRenameDialog(index)">
+                                <div class="scene-name-row">
+                                    <div class="scene-name">{{ scene.name }}</div>
+                                    <van-icon name="edit" class="edit-icon" />
+                                </div>
                                 <div class="scene-desc">{{ scene.desc }}</div>
                             </div>
                             <div class="scene-actions">
@@ -110,6 +113,11 @@
                 </van-button>
             </div>
         </div>
+        
+        <!-- 重命名弹窗 -->
+        <van-dialog v-model:show="showRenameDialog" title="重命名场景" show-cancel-button @confirm="confirmRename">
+            <van-field v-model="renameText" placeholder="请输入场景名称" />
+        </van-dialog>
     </van-popup>
 </template>
 
@@ -294,6 +302,24 @@ const scenes = ref([
 ]);
 const learningIndex = ref<number>(-1);
 
+// 重命名相关状态
+const showRenameDialog = ref(false);
+const renameText = ref('');
+const renameTargetIndex = ref(-1);
+
+const openRenameDialog = (index: number) => {
+    renameTargetIndex.value = index;
+    renameText.value = scenes.value[index].name;
+    showRenameDialog.value = true;
+};
+
+const confirmRename = () => {
+    if (renameTargetIndex.value >= 0 && renameText.value.trim()) {
+        scenes.value[renameTargetIndex.value].name = renameText.value.trim();
+        scenes.value[renameTargetIndex.value].desc = '自定义名称'; // 更新描述以反映修改
+    }
+};
+
 // 轮询学习状态
 const checkLearnStatus = async (key: string) => {
     try {
@@ -332,22 +358,9 @@ const startLearn = async (index: number) => {
     const scene = scenes.value[index];
     scene.status = 'learning';
     
-    // 调用 API 启动学习
     try {
-        // 这里调用 store action 或者 api
-        // 注意：storeaction 应该调用 api: POST /devices/:id/learn/start {key: ...}
-        // 但这里我们已经在 DevicesController 中定义了 POST :id/setup/learn-all (批量) 
-        // 或者使用 POST :id/learn/start (单键)
-        // 让我们检查一下 api.devices.ts 是否有 startLearning? 
-        // 看来之前定义了 startLearning 在 learn.service.ts 对应 Endpoint，但 api/devices.ts 里可能漏了。
-        // 不过没关系，我们之前用的是 startAutoDetect，这里我们可以用 apiClient 直接调用，或者由于是 setup wizard，
-        // 我们可以直接调用 Store里的 action? 
-        // 让我们看看 DevicesController: 
-        // @Post(':id/learn/start') -> learnService.startLearning
-        
-        // 重新检查 front api，确实没有 startLearning 单个 key 的，只有 setBrand 等。
-        // 为了方便，这里我们直接用 axios 调用 endpoint，或者补上 api
-        await apiClient.post(`/devices/${props.deviceId}/learn/start`, { key: scene.key });
+        // 调用 API 启动学习
+        await devicesApi.startLearning(props.deviceId, scene.key);
         
         showToast({ message: `请按遥控器: ${scene.name}`, duration: 0 }); // 持续显示
         
@@ -419,6 +432,8 @@ const finishSetup = async () => {
             .map(s => ({
                 key: s.key,
                 raw: s.raw,
+                // ✅ 传递 name 以便后端保存
+                name: s.name,
                 // 为了兼容后端 DTO，可能需要填充一些假数据，或者后端已经允许 raw
                 power: s.key === 'off' ? false : true
             }));
@@ -633,11 +648,26 @@ onUnmounted(() => {
 
 .scene-info {
     flex: 1;
+    /* ✅ 可点击以编辑 */
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+}
+
+.scene-name-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .scene-name {
     font-size: 16px;
     font-weight: 500;
+}
+
+.edit-icon {
+    font-size: 14px;
+    color: #999;
 }
 
 .scene-desc {

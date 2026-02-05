@@ -58,7 +58,8 @@ DetectionResult AutoDetect::analyze(decode_results *results) {
 
   // 2. Use IRac to decode everything (Protocol + Model + State)
   stdAc::state_t state;
-  if (IRac::decode(results, &state)) {
+  // Use IRAcUtils to decode
+  if (IRAcUtils::decodeToState(results, &state)) {
     DEBUG_PRINTLN("[自动检测] ✅ IRac 成功识别信号！");
 
     result.success = true;

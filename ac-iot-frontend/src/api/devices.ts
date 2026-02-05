@@ -59,6 +59,9 @@ export const devicesApi = {
     saveScenes: (id: number, scenes: any[]) =>
         apiClient.post(`/devices/${id}/setup/save-scenes`, { scenes }),
 
+    // 开始学习
+    startLearning: (id: number, key: string) => apiClient.post(`/devices/${id}/learn/start`, { key }),
+
     // 获取学习结果 (Polling)
     getLearningResult: (id: number) =>
         apiClient.get(`/devices/${id}/setup/learn-result`),

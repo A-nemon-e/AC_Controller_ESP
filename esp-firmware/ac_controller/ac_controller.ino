@@ -43,6 +43,7 @@ void handleControlCommand(const char *json);
 void handleLearnCommand(const char *json);
 void handleAutoDetectCommand(const char *json);   // ✅ 新增
 void handleConfigBindingUpdate(const char *json); // ✅ 新增：处理绑定配置
+void handleSceneSaveCommand(const char *json);    // ✅ 新增：处理场景保存
 void printSystemInfo();
 void publishDeviceAnnounce();                       // ✅ 设备上线消息
 bool tryParseProtocol(decode_results *results);     // ✅ 协议解析
@@ -177,7 +178,7 @@ void onIRReceived(decode_results *results) {
     DetectionResult result = AutoDetect::analyze(results);
 
     // 构建MQTT消息
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<2048> doc; // ✅ 增大Buffer，防止Raw Data截断
     doc["success"] = result.success;
     doc["protocol"] = result.protocol;
     doc["model"] = result.model;
@@ -198,7 +199,7 @@ void onIRReceived(decode_results *results) {
       DEBUG_PRINTLN("[主程序] ❌ 协议未识别，返回raw数据");
     }
 
-    char payload[768];
+    char payload[2048]; // ✅ 增大Payload Buffer
     serializeJson(doc, payload);
 
     String topic = MQTTClient::getTopic("auto_detect/result");
@@ -565,8 +566,6 @@ void handleAutoDetectCommand(const char *json) {
 
     DEBUG_PRINTLN("[自动检测] ⏹ 已停止");
   }
-  DEBUG_PRINTLN("[自动检测] ⏹ 已停止");
-}
 }
 
 // ===== 处理场景批量保存 (Front-end Wizard) =====

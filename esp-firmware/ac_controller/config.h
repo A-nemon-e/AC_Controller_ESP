@@ -44,7 +44,7 @@
 // MQTT连接参数
 #define MQTT_KEEPALIVE 60         // 心跳间隔（秒）
 #define MQTT_RECONNECT_DELAY 5000 // 重连延迟（毫秒）
-#define MQTT_BUFFER_SIZE 512      // MQTT消息缓冲区大小
+#define MQTT_BUFFER_SIZE 2048     // MQTT消息缓冲区大小 (由512扩容，适配长消息)
 
 // ===== 定时器配置默认值 =====
 #define DEFAULT_SENSOR_INTERVAL 30000
