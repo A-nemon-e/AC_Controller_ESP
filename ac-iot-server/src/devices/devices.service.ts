@@ -431,7 +431,7 @@ export class DevicesService {
             }
             // 4. ✅ 处理 availability (Online/Offline Status)
             else if (topic.endsWith('/availability')) {
-                const status = msgString; // Payload is "online" or "offline" string
+                const status = msgString.trim(); // Trim potential whitespace
                 const isOnline = status === 'online';
 
                 device.isOnline = isOnline;
@@ -442,6 +442,12 @@ export class DevicesService {
             }
             // 4. ✅ 处理 status 状态上报 (Fixing Sync Issue)
             else if (topic.endsWith('/status')) {
+                // Implicit Heartbeat: If we receive status, device is definitely online
+                if (!device.isOnline) {
+                    device.isOnline = true;
+                    this.logger.log(`Device ${uuid} marked ONLINE via implicit status heartbeat`);
+                }
+                device.lastSeen = new Date();
                 const data = JSON.parse(msgString);
                 // data: { power, mode, targetTemp, fan, swingV, swingH, temp, hum, current, ... }
 
