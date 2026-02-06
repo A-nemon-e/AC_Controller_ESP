@@ -269,7 +269,16 @@ const applyCommand = async () => {
   showLoadingToast({ message: '发送中...', forbidClick: true })
 
   try {
-    await devicesApi.sendCommand(currentDevice.value.id, command.value)
+    // ✅ 修复：将风速字符串映射为整数发送给 ESP (0=auto, 1=low, 2=mid, 3=high)
+    const payload = { ...command.value }
+    const fanMap: Record<string, number> = { auto: 0, low: 1, mid: 2, high: 3 }
+    
+    // 如果是字符串才转换
+    if (typeof payload.fan === 'string') {
+        payload.fan = fanMap[payload.fan] ?? 0
+    }
+
+    await devicesApi.sendCommand(currentDevice.value.id, payload)
     closeToast()
     showToast({ message: '命令已发送', icon: 'success' })
     // Reset interaction time to allow immediate sync if desired, 

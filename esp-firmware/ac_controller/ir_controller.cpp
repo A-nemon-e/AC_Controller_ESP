@@ -56,12 +56,13 @@ bool IRController::sendRaw(uint16_t *rawData, uint16_t length) {
 }
 
 void IRController::handleReceive() {
-  // ✅ 过滤自发自收的回声 (1.5秒盲区)
-  if (millis() - lastSendTime < SEND_IGNORE_WINDOW) {
-    return;
-  }
-
   if (irrecv.decode(&results)) {
+    // ✅ 过滤自发自收的回声 (主动丢弃模式)
+    if (millis() - lastSendTime < SEND_IGNORE_WINDOW) {
+      DEBUG_PRINTLN("[红外] 🔇 忽略回声信号 (Cooling down)");
+      irrecv.resume();
+      return;
+    }
     // 过滤重复码
     if (results.value == 0xFFFFFFFF || results.value == 0x0) {
       irrecv.resume();

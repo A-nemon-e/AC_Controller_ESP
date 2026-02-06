@@ -5,6 +5,7 @@
 #include "sensors.h"
 #include "config_manager.h"
 #include "mqtt_client.h"
+#include "state_manager.h" // ✅ 新增：需要访问 StateManager
 #include <ArduinoJson.h>
 
 // 静态成员初始化
@@ -84,20 +85,36 @@ void Sensors::publishStatus() {
     return;
   }
 
-  // 构建JSON消息
-  StaticJsonDocument<256> doc;
-  doc["temp"] = temperature;
-  doc["hum"] = humidity;
-  doc["current"] = current;
+  // ✅ 修复：获取完整的空调状态，合并传感器数据
+  // 防止只发送温湿度导致后端丢失空调控制状态
+  AirConditionerState &acState = StateManager::getState();
+
+  StaticJsonDocument<512> doc;
+
+  // 1. 填入空调控制状态
+  doc["power"] = acState.power;
+  doc["mode"] = acState.mode;
+  // doc["targetTemp"] = acState.temp; // ❌ 移除重复
+  doc["setTemp"] = acState.temp; // ✅ 保留标准字段
+  doc["fan"] = acState.fan;
+  doc["swingVertical"] = acState.swingV;
+  doc["swingHorizontal"] = acState.swingH;
+  doc["source"] = "sensor_report";
+
+  // 2. 填入传感器数据
+  doc["temp"] = temperature; // 环境温度
+  doc["hum"] = humidity;     // 环境湿度
+  doc["current"] = current;  // 电流
+
   doc["timestamp"] = millis() / 1000;
 
-  char payload[256];
+  char payload[512];
   serializeJson(doc, payload);
 
   // 发布到MQTT
   String topic = MQTTClient::getTopic("status");
   if (MQTTClient::publish(topic.c_str(), payload)) {
-    DEBUG_PRINTLN("[传感器] ✅ 状态已上报");
+    DEBUG_PRINTLN("[传感器] ✅ 完整状态已上报");
   } else {
     DEBUG_PRINTLN("[传感器] ❌ 状态上报失败");
   }
