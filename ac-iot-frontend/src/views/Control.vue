@@ -115,8 +115,12 @@
           </div>
         </div>
 
-        <!-- 4. Model 切换提示 (STRICTLY PRESERVED) -->
-        <div class="model-tip" @click="openModelSwitcher">
+        <!-- 4. Model 切换提示 (Only show if model is valid/supported, i.e., not -1) -->
+        <div 
+          class="model-tip" 
+          @click="openModelSwitcher"
+          v-if="brandSetup?.model !== -1"
+        >
           部分控制无效？点击此处切换 Model (当前: {{ brandSetup?.model || 1 }}) ➡️
         </div>
 
@@ -248,13 +252,13 @@ const togglePower = () => {
 }
 
 const decreaseTemp = () => {
-  if (command.value.setTemp && command.value.setTemp > 16) {
+  if (command.value.setTemp && command.value.setTemp > 10) {
     command.value.setTemp--
   }
 }
 
 const increaseTemp = () => {
-  if (command.value.setTemp && command.value.setTemp < 30) {
+  if (command.value.setTemp && command.value.setTemp < 31) {
     command.value.setTemp++
   }
 }
