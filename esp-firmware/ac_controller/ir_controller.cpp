@@ -176,13 +176,19 @@ bool IRController::sendBrand(const char *brand, int model, bool power,
 
   switch (fanSpeed) {
   case 1:
-    state.fanspeed = stdAc::fanspeed_t::kLow;
+    state.fanspeed = stdAc::fanspeed_t::kMin;
     break;
   case 2:
-    state.fanspeed = stdAc::fanspeed_t::kMedium;
+    state.fanspeed = stdAc::fanspeed_t::kLow;
     break;
   case 3:
+    state.fanspeed = stdAc::fanspeed_t::kMedium;
+    break;
+  case 4:
     state.fanspeed = stdAc::fanspeed_t::kHigh;
+    break;
+  case 5:
+    state.fanspeed = stdAc::fanspeed_t::kMax;
     break;
   default:
     state.fanspeed = stdAc::fanspeed_t::kAuto;

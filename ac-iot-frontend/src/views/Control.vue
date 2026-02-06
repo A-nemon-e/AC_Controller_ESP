@@ -214,7 +214,7 @@ const command = ref<Partial<DeviceState>>({
   power: false,
   mode: 'cool',
   setTemp: 26,
-  fan: 'auto',
+  fan: 0,
   swingVertical: false,
   swingHorizontal: false,
 })
@@ -226,12 +226,20 @@ const modes = [
   { value: 'fan', label: '送风', icon: '💨' },
 ]
 
-const fanLevels = ['auto', 'low', 'mid', 'high']
+const fanLevels = [0, 1, 2, 3, 4, 5]
 
 // --- Computed Helpers ---
 const fanText = computed(() => {
-  const map: Record<string, string> = { auto: '自动', low: '低', mid: '中', high: '高' }
-  return map[command.value.fan || 'auto']
+  const level = typeof command.value.fan === 'number' ? command.value.fan : 0
+  const map: Record<number, string> = { 
+    0: '自动', 
+    1: '▂', 
+    2: '▂▃', 
+    3: '▂▃▄', 
+    4: '▂▃▄▅', 
+    5: '▂▃▄▅▆' 
+  }
+  return map[level] || '自动'
 })
 
 const swingText = computed(() => {
@@ -264,7 +272,7 @@ const increaseTemp = () => {
 }
 
 const cycleFan = () => {
-  const current = command.value.fan || 'auto'
+  const current = typeof command.value.fan === 'number' ? command.value.fan : 0
   const idx = fanLevels.indexOf(current)
   const nextIdx = (idx + 1) % fanLevels.length
   command.value.fan = fanLevels[nextIdx]
@@ -282,20 +290,10 @@ const applyCommand = async () => {
   showLoadingToast({ message: '发送中...', forbidClick: true })
 
   try {
-    // ✅ 修复：将风速字符串映射为整数发送给 ESP (0=auto, 1=low, 2=mid, 3=high)
-    const payload = { ...command.value }
-    const fanMap: Record<string, number> = { auto: 0, low: 1, mid: 2, high: 3 }
-    
-    // 如果是字符串才转换
-    if (typeof payload.fan === 'string') {
-        payload.fan = fanMap[payload.fan] ?? 0
-    }
-
-    await devicesApi.sendCommand(currentDevice.value.id, payload)
+    // ✅ 直接发送数值 (0-5)
+    await devicesApi.sendCommand(currentDevice.value.id, command.value)
     closeToast()
     showToast({ message: '命令已发送', icon: 'success' })
-    // Reset interaction time to allow immediate sync if desired, 
-    // or keep lock to prevent jitter. Let's keep existing lock logic natural.
   } catch (error) {
     closeToast()
     showToast({ message: '发送失败', icon: 'fail' })

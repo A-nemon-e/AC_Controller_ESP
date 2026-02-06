@@ -29,7 +29,7 @@ export interface DeviceState {
     power: boolean
     mode: 'cool' | 'heat' | 'fan' | 'dry' | 'auto'
     setTemp: number
-    fan: 'auto' | 'low' | 'mid' | 'high' | 'turbo'
+    fan: number // 0=Auto, 1-5=Levels
     swingVertical: boolean
     swingHorizontal: boolean
     turbo?: boolean
