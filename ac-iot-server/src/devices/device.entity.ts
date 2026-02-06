@@ -43,4 +43,11 @@ export class Device {
 
     @Column()
     userId: number;
+
+    // ✅ 新增：在线状态 (LWT)
+    @Column({ default: false })
+    isOnline: boolean;
+
+    @Column({ nullable: true })
+    lastSeen: Date;
 }

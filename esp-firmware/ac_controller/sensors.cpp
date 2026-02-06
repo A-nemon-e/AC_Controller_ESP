@@ -113,8 +113,9 @@ void Sensors::publishStatus() {
 
   // 发布到MQTT
   String topic = MQTTClient::getTopic("status");
-  if (MQTTClient::publish(topic.c_str(), payload)) {
-    DEBUG_PRINTLN("[传感器] ✅ 完整状态已上报");
+  // ✅ 使用 retained=true，确保后端/前端重启后能立刻收到最新状态
+  if (MQTTClient::publish(topic.c_str(), payload, true)) {
+    DEBUG_PRINTLN("[传感器] ✅ 完整状态已上报 (Retained)");
   } else {
     DEBUG_PRINTLN("[传感器] ❌ 状态上报失败");
   }

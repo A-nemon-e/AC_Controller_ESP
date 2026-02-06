@@ -9,6 +9,15 @@
       />
     </van-dropdown-menu>
 
+    <!-- 离线提示 -->
+    <van-notice-bar
+      v-if="currentDevice && currentDevice.isOnline === false"
+      left-icon="warning-o"
+      text="设备已离线，无法接收控制指令"
+      color="#ed6a0c"
+      background="#fffbe8"
+    />
+
     <!-- 无设备状态 -->
     <div v-if="!currentDevice" class="empty-state">
       <van-empty description="暂无设备">

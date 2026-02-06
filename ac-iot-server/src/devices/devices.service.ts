@@ -429,6 +429,17 @@ export class DevicesService {
                 });
                 this.logger.log(`Learn Result for ${uuid} (key=${data.key}): ${data.success}`);
             }
+            // 4. ✅ 处理 availability (Online/Offline Status)
+            else if (topic.endsWith('/availability')) {
+                const status = msgString; // Payload is "online" or "offline" string
+                const isOnline = status === 'online';
+
+                device.isOnline = isOnline;
+                device.lastSeen = new Date(); // Update check-in time
+
+                await this.devicesRepository.save(device);
+                this.logger.log(`Device ${uuid} is now ${status.toUpperCase()}`);
+            }
             // 4. ✅ 处理 status 状态上报 (Fixing Sync Issue)
             else if (topic.endsWith('/status')) {
                 const data = JSON.parse(msgString);

@@ -8,6 +8,8 @@ export interface Device {
     userId: number
     config: DeviceConfig
     lastState: DeviceState | null
+    isOnline?: boolean
+    lastSeen?: string
 }
 
 export interface DeviceConfig {

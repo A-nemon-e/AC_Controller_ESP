@@ -172,8 +172,20 @@ bool MQTTClient::reconnect() {
                  MAX_EEPROM_FAIL);
   }
 
+  // LWT 配置
+  String availTopic = getTopic("availability");
+  const char *willTopic = availTopic.c_str(); // ac/user_x/dev_uuid/availability
+  const char *willMsg = "offline";
+  int willQoS = 1;
+  bool willRetain = true;
+
+  DEBUG_PRINTF("[MQTT] LWT Topic: %s\n", willTopic);
+
   // 尝试连接（使用回退后的配置）
-  if (mqttClient.connect(clientId.c_str(), mqttUser, mqttPassword)) {
+  // connect(clientId, username, password, willTopic, willQoS, willRetain,
+  // willMessage)
+  if (mqttClient.connect(clientId.c_str(), mqttUser, mqttPassword, willTopic,
+                         willQoS, willRetain, willMsg)) {
     DEBUG_PRINTLN("[MQTT] ✅ 连接成功");
     connected = true;
     LEDIndicator::setStatus(STATUS_READY);
@@ -199,9 +211,8 @@ bool MQTTClient::reconnect() {
     subscribe(brandsGetTopic.c_str());  // ✅
     subscribe(sceneSaveTopic.c_str());  // ✅
 
-    // 发布上线消息
-    String statusTopic = getTopic("status");
-    publish(statusTopic.c_str(), "{\"online\":true}", true);
+    // 发布上线消息 (至 availability topic)
+    publish(willTopic, "online", true); // Retained = true
 
     return true;
   } else {
