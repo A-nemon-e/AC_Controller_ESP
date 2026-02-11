@@ -63,13 +63,12 @@
 #define CURRENT_RATIO 0.01 // 电流转换比例
 
 // ===== EEPROM存储地址 =====
-#define EEPROM_SIZE 4096       // ✅ 扩容到4KB (ESP8266 Flash支持)
-#define EEPROM_WIFI_SSID 0     // SSID起始地址（最多32字节）
-#define EEPROM_WIFI_PASS 32    // 密码起始地址（最多64字节）
-#define EEPROM_DEVICE_UUID 96  // UUID起始地址（最多32字节）
-#define EEPROM_CONFIG_FLAG 128 // 配置标志位（1字节，0x55表示已配置）
-#define EEPROM_USER_ID 129     // ✅ 用户ID地址（4字节）
-#define EEPROM_DEVICE_ID 133   // ✅ 设备ID地址（4字节）
+#define EEPROM_SIZE 4096    // ✅ 扩容到4KB (ESP8266 Flash支持)
+#define EEPROM_WIFI_SSID 0  // SSID起始地址（最多32字节）
+#define EEPROM_WIFI_PASS 32 // 密码起始地址（最多64字节）
+
+#define EEPROM_USER_ID 129   // ✅ 用户ID地址（4字节）
+#define EEPROM_DEVICE_ID 133 // ✅ 设备ID地址（4字节）
 
 // ===== 调试配置 =====
 #define SERIAL_BAUD 115200
