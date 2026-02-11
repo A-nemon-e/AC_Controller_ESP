@@ -44,9 +44,9 @@ export class MqttService implements OnModuleInit {
             this.logger.error(`MQTT Connection Error: ${err.message}`);
         });
 
-        this.client.on('message', (topic, payload) => {
-            this.logger.log(`Received message on topic "${topic}": ${payload.toString()}`);
-            this.eventEmitter.emit('mqtt.message', { topic, payload });
+        this.client.on('message', (topic, payload, packet) => {
+            // this.logger.log(`Received message on topic "${topic}": ${payload.toString()}`);
+            this.eventEmitter.emit('mqtt.message', { topic, payload, packet });
         });
     }
 
@@ -54,6 +54,7 @@ export class MqttService implements OnModuleInit {
         // 订阅所有设备相关的 topic
         const topicPatterns = [
             'ac/+/+/status',           // 状态上报
+            'ac/+/+/availability',     // ✅ 在线状态 (LWT)
             'ac/+/+/event',            // Ghost 事件
             'ac/+/+/ir_event',         // ✅ 红外事件
             'ac/+/+/learn/result',     // 学习结果

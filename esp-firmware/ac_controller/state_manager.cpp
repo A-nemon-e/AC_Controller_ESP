@@ -36,8 +36,8 @@ void StateManager::setState(bool power, const char *mode, uint8_t temp,
                             const char *source) {
   currentState.power = power;
   currentState.mode = String(mode);
-  currentState.temp = constrain(temp, 16, 30);
-  currentState.fan = constrain(fan, 0, 3);
+  currentState.temp = constrain(temp, 10, 31);
+  currentState.fan = constrain(fan, 0, 5);
   currentState.swingV = swingV;
   currentState.swingH = swingH;
   currentState.source = String(source);
@@ -71,9 +71,9 @@ bool StateManager::updateFromJSON(const char *json) {
   if (doc.containsKey("mode"))
     currentState.mode = doc["mode"].as<String>();
   if (doc.containsKey("temp"))
-    currentState.temp = constrain((int)doc["temp"], 16, 30);
+    currentState.temp = constrain((int)doc["temp"], 10, 31);
   if (doc.containsKey("fan"))
-    currentState.fan = constrain((int)doc["fan"], 0, 3);
+    currentState.fan = constrain((int)doc["fan"], 0, 5);
   if (doc.containsKey("swingVertical"))
     currentState.swingV = doc["swingVertical"];
   if (doc.containsKey("swingHorizontal"))
@@ -100,7 +100,7 @@ void StateManager::publishState() {
   // 空调状态
   doc["power"] = currentState.power;
   doc["mode"] = currentState.mode;
-  doc["targetTemp"] = currentState.temp;
+  doc["setTemp"] = currentState.temp;
   doc["fan"] = currentState.fan;
   doc["swingVertical"] = currentState.swingV;
   doc["swingHorizontal"] = currentState.swingH;

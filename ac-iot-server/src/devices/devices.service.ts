@@ -359,8 +359,8 @@ export class DevicesService {
      * ✅ MQTT 消息监听 (处理 brands/list, auto_detect, learn)
      */
     @OnEvent('mqtt.message')
-    async handleMqttMessage(event: { topic: string, payload: any }) {
-        const { topic, payload } = event;
+    async handleMqttMessage(event: { topic: string, payload: any, packet?: any }) {
+        const { topic, payload, packet } = event;
         const msgString = payload.toString();
 
         try {
@@ -440,14 +440,18 @@ export class DevicesService {
                 await this.devicesRepository.save(device);
                 this.logger.log(`Device ${uuid} is now ${status.toUpperCase()}`);
             }
+
             // 4. ✅ 处理 status 状态上报 (Fixing Sync Issue)
             else if (topic.endsWith('/status')) {
-                // Implicit Heartbeat: If we receive status, device is definitely online
-                if (!device.isOnline) {
+                // Implicit Heartbeat: Only mark online if message is NOT retained (fresh)
+                if (!packet?.retain && !device.isOnline) {
                     device.isOnline = true;
                     this.logger.log(`Device ${uuid} marked ONLINE via implicit status heartbeat`);
+                    device.lastSeen = new Date(); // Update check-in time
+                } else if (!packet?.retain) {
+                    device.lastSeen = new Date(); // Even if already online, update seen time for fresh messages
                 }
-                device.lastSeen = new Date();
+
                 const data = JSON.parse(msgString);
                 // data: { power, mode, targetTemp, fan, swingV, swingH, temp, hum, current, ... }
 
