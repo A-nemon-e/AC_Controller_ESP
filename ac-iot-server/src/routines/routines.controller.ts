@@ -14,8 +14,10 @@ export class RoutinesController {
     }
 
     @Get()
-    findAll(@Request() req: any) {
-        return this.routinesService.findAll(req.user.userId);
+    async findAll(@Request() req: any) {
+        const routines = await this.routinesService.findAll(req.user.userId);
+        // Filter routines to only include those with triggers (actual routines, not just schedules)
+        return routines.filter(r => r.triggers && Array.isArray(r.triggers) && r.triggers.length > 0);
     }
 
     @Get(':id')
