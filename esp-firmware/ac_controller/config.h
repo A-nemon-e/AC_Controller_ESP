@@ -70,7 +70,6 @@
 #define EEPROM_CONFIG_FLAG 128 // 配置标志位（1字节，0x55表示已配置）
 #define EEPROM_USER_ID 129     // ✅ 用户ID地址（4字节）
 #define EEPROM_DEVICE_ID 133   // ✅ 设备ID地址（4字节）
-#define EEPROM_SCENES_ADDR 512 // ✅ 学习场景起始地址（512字节空间）
 
 // ===== 调试配置 =====
 #define SERIAL_BAUD 115200
