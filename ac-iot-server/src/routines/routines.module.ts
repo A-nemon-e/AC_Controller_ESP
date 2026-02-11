@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoutinesService } from './routines.service';
 import { RoutinesController } from './routines.controller';
+import { SchedulesController } from './schedules.controller';
 import { Routine } from './routine.entity';
 import { DevicesModule } from '../devices/devices.module';
 
@@ -10,7 +11,7 @@ import { DevicesModule } from '../devices/devices.module';
         TypeOrmModule.forFeature([Routine]),
         DevicesModule,
     ],
-    controllers: [RoutinesController],
+    controllers: [RoutinesController, SchedulesController],
     providers: [RoutinesService],
     exports: [RoutinesService],
 })
