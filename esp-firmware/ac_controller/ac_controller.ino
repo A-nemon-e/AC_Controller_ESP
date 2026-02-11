@@ -23,7 +23,7 @@
 #include "ir_learning.h"
 #include "led_indicator.h"
 #include "mqtt_client.h"
-#include "scene_manager.h" // ✅ 新增：学习场景管理
+
 #include "sensors.h"
 #include "state_manager.h"
 #include "wifi_manager.h"
@@ -43,12 +43,10 @@ void handleControlCommand(const char *json);
 void handleLearnCommand(const char *json);
 void handleAutoDetectCommand(const char *json);   // ✅ 新增
 void handleConfigBindingUpdate(const char *json); // ✅ 新增：处理绑定配置
-void handleSceneSaveCommand(const char *json);    // ✅ 新增：处理场景保存
 void printSystemInfo();
-void publishDeviceAnnounce();                       // ✅ 设备上线消息
-bool tryParseProtocol(decode_results *results);     // ✅ 协议解析
-bool tryMatchLearnedScene(decode_results *results); // ✅ 场景匹配
-void publishIREvent(decode_results *results);       // ✅ 红外事件上报
+void publishDeviceAnnounce();                   // ✅ 设备上线消息
+bool tryParseProtocol(decode_results *results); // ✅ 协议解析
+void publishIREvent(decode_results *results);   // ✅ 红外事件上报
 
 // ===== 初始化 =====
 void setup() {
@@ -104,9 +102,6 @@ void setup() {
 
   // 8. 初始化Ghost检测器
   GhostDetector::init();
-
-  // 9. 初始化场景管理器
-  SceneManager::init();
 
   // 10. 初始化状态管理器
   StateManager::init();
@@ -230,12 +225,6 @@ void onIRReceived(decode_results *results) {
     return;
   }
 
-  // 尝试匹配学习场景
-  if (tryMatchLearnedScene(results)) {
-    DEBUG_PRINTLN("[主程序] ✅ 匹配到学习场景，状态已更新");
-    return;
-  }
-
   // 都不匹配，只发布事件
   DEBUG_PRINTLN("[主程序] ⚠️ 无法解析，只发布事件");
   publishIREvent(results);
@@ -307,24 +296,6 @@ bool tryParseProtocol(decode_results *results) {
   return true;
 }
 
-// ===== 尝试匹配学习场景 =====
-bool tryMatchLearnedScene(decode_results *results) {
-  String rawData = IRController::getLastRawData(); // 使用IRController的方法
-  LearnedScene scene;
-
-  if (SceneManager::matchScene(rawData.c_str(), scene)) {
-    // 匹配成功，使用场景参数更新状态
-    StateManager::setState(scene.power, scene.mode, scene.temp, 0, false, false,
-                           "ir_learned");
-
-    DEBUG_PRINTF("[场景匹配] ✅ 匹配到: %s\n", scene.key);
-    return true;
-  }
-
-  DEBUG_PRINTLN("[场景匹配] ❌ 未匹配到任何场景");
-  return false;
-}
-
 // ===== 发布红外事件 =====
 void publishIREvent(decode_results *results) {
   DEBUG_PRINTLN("[主程序] 发布红外事件");
@@ -390,9 +361,6 @@ void onMQTTMessage(char *topic, uint8_t *payload, unsigned int length) {
     String json = IRController::getSupportedBrandsJSON();
     String topic = MQTTClient::getTopic("brands/list");
     MQTTClient::publish(topic.c_str(), json.c_str());
-
-  } else if (topicStr.endsWith("/scene/save")) { // ✅ 新增：批量保存场景
-    handleSceneSaveCommand(message);
   }
 }
 
@@ -441,7 +409,7 @@ void handleControlCommand(const char *json) {
     }
   }
 
-  // ===== ✅ 优先级1: 品牌协议模式 (EEPROM配置) =====
+  // ===== ✅ 优先级1: 品牌协议模式 (配置) =====
   DeviceConfig &cfg = ConfigManager::getConfig();
   if (cfg.brand[0] != '\0') { // 如果配置了品牌
     DEBUG_PRINTF("[主程序] 使用品牌协议: %s\n", cfg.brand);
@@ -576,59 +544,6 @@ void handleAutoDetectCommand(const char *json) {
 
     DEBUG_PRINTLN("[自动检测] ⏹ 已停止");
   }
-}
-
-// ===== 处理场景批量保存 (Front-end Wizard) =====
-void handleSceneSaveCommand(const char *json) {
-  DEBUG_PRINTLN("[主程序] → 收到场景保存指令");
-
-  // 增大 buffer 以容纳 7 个场景的大 JSON
-  // ✅ 改为堆分配 (4KB在栈上必挂)
-  DynamicJsonDocument doc(4096);
-  DeserializationError error = deserializeJson(doc, json);
-
-  if (error) {
-    DEBUG_PRINTLN("[场景保存] ❌ JSON解析失败");
-    return;
-  }
-
-  JsonArray scenes = doc["scenes"];
-  if (scenes.isNull()) {
-    DEBUG_PRINTLN("[场景保存] ❌ 缺少 scenes 数组");
-    return;
-  }
-
-  DEBUG_PRINTLN("[场景保存] 清空旧场景...");
-  SceneManager::clearScenes();
-
-  int successCount = 0;
-  for (JsonObject scene : scenes) {
-    const char *key = scene["key"];
-    const char *rawData = scene["raw"];
-    bool power = scene["power"] | false;
-    const char *mode = scene["mode"] | "cool";
-
-    // ✅ 优先 setTemp
-    uint8_t temp = 26;
-    if (scene.containsKey("setTemp")) {
-      temp = scene["setTemp"];
-    } else {
-      temp = scene["temp"] | 26;
-    }
-
-    if (key && rawData) {
-      if (SceneManager::addScene(key, rawData, power, mode, temp)) {
-        successCount++;
-        DEBUG_PRINTF("[场景保存] 已保存: %s\n", key);
-      }
-    }
-  }
-
-  DEBUG_PRINTF("[场景保存] ✅ 成功保存 %d 个场景\n", successCount);
-
-  // 发送确认 (可选)
-  // String topic = MQTTClient::getTopic("scene/save_ack");
-  // MQTTClient::publish(topic.c_str(), "{\"status\":\"ok\"}");
 }
 
 // ===== 发送设备上线消息（用于设备发现）=====
