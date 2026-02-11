@@ -8,6 +8,7 @@
 bool WiFiManager::configured = false;
 unsigned long WiFiManager::lastReconnectAttempt = 0;
 ESP8266WebServer WiFiManager::server(80); // ✅ Web服务器监听80端口
+DNSServer WiFiManager::dnsServer;         // ✅ DNS服务器实例
 
 void WiFiManager::connect() {
   DEBUG_PRINTLN("\n[WiFi] 初始化WiFi模块 (3层连接策略)");
@@ -107,9 +108,16 @@ void WiFiManager::startAPMode() {
 
   WiFi.softAP(apName.c_str());
 
+  // ✅ 启动DNS服务器，将所有请求重定向到本机IP
+  // 53是DNS端口，"*"代表匹配所有域名
+  dnsServer.start(53, "*", WiFi.softAPIP());
+  DEBUG_PRINTLN("[WiFi] DNS服务器已启动 (Captive Portal)");
+
   // 启动Web服务器
   server.on("/", HTTP_GET, handleRoot);
   server.on("/save", HTTP_POST, handleSave);
+  // ✅ 捕获所有其他请求并重定向到根目录 (Android/iOS Captive Portal检测)
+  server.onNotFound(handleRoot);
   server.begin();
 
   DEBUG_PRINTLN("[WiFi] Web服务器已启动");
@@ -117,6 +125,7 @@ void WiFiManager::startAPMode() {
 
   // 阻塞循环，处理Web请求
   while (true) {
+    dnsServer.processNextRequest(); // ✅ 处理DNS请求
     server.handleClient();
     LEDIndicator::update();
     delay(10);

@@ -23,7 +23,7 @@
 #include "ir_learning.h"
 #include "led_indicator.h"
 #include "mqtt_client.h"
-#include "scene_manager.h" // ✅ 新增：学习场景管理
+
 #include "sensors.h"
 #include "state_manager.h"
 #include "wifi_manager.h"

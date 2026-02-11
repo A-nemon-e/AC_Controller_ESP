@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "led_indicator.h"
+#include <DNSServer.h> // ✅ 新增：DNS服务器库 (用于Captive Portal)
 #include <EEPROM.h>
 #include <ESP8266WebServer.h> // ✅ 新增：Web服务器库
 #include <ESP8266WiFi.h>
@@ -43,6 +44,7 @@ private:
   static bool configured;
   static unsigned long lastReconnectAttempt;
   static ESP8266WebServer server; // ✅ 新增：Web服务器实例
+  static DNSServer dnsServer;     // ✅ 新增：DNS服务器实例
 
   // 从EEPROM读取WiFi凭证
   static bool loadCredentials(String &ssid, String &password);
