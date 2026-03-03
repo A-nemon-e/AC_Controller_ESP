@@ -11,14 +11,24 @@
 #include <stdint.h>
 
 // ===== 硬件引脚定义 =====
-#define PIN_IR_SEND 14  // D5 - 红外发射LED
-#define PIN_IR_RECV 13  // D7 - 1838B红外接收头
-#define PIN_MIC 12      // D6 - 麦克风数字输出
-#define PIN_SDA 4       // D2 - I2C数据线（AHT20）
-#define PIN_SCL 5       // D1 - I2C时钟线（AHT20）
-#define PIN_LED_SYS 15  // D8 - 系统状态LED
-#define PIN_LED_IR 16   // D0 - 红外接收指示LED
-#define PIN_ADC A0      // A0 - 电流互感器
+// 红外系统（保留）
+#define PIN_IR_SEND 14   // D5 - 红外发射LED
+#define PIN_IR_RECV_1 2  // D4 - 1838B红外接收器1 (新增)
+#define PIN_IR_RECV_2 12 // D6 - 1838B红外接收器2 (新增，原麦克风引脚)
+#define PIN_IR_RECV_3 13 // D7 - 1838B红外接收器3 (保留)
+
+// I2C总线（复用AHT20和IS31FL3733）
+#define PIN_SDA 4 // D2 - I2C数据线 (AHT20 0x38 + IS31FL3733 0x50-0x55)
+#define PIN_SCL 5 // D1 - I2C时钟线
+#define I2C_CLOCK_SPEED 400000 // I2C速度400kHz快速模式
+
+// LED显示系统（新增）
+#define PIN_SDB 0      // D3 - IS31FL3733 Shutdown控制（上电需拉高）
+#define PIN_BUTTON 16  // D0 - 功能按键（原LED指示器）
+#define PIN_LED_SYS 15 // D8 - 系统状态LED（保留）
+
+// 传感器（保留）
+#define PIN_ADC A0 // A0 - 电流互感器
 
 // ===== WiFi配置（默认值，可通过SmartConfig修改）=====
 // 注意：实际的WiFi凭证会存储在EEPROM中
@@ -26,13 +36,13 @@
 // #define WIFI_SSID "TP-LINK_AFC5F2" // ✅ 硬编码WiFi名称
 // #define WIFI_PASSWORD "" // ✅ 硬编码WiFi密码
 
-#define WIFI_CONNECT_TIMEOUT 20000  // WiFi连接超时（毫秒）
-#define WIFI_RECONNECT_DELAY 5000   // 重连延迟（毫秒）
+#define WIFI_CONNECT_TIMEOUT 20000 // WiFi连接超时（毫秒）
+#define WIFI_RECONNECT_DELAY 5000  // 重连延迟（毫秒）
 
 // ===== MQTT配置 =====
 // TODO: 改进为从EEPROM读取，支持服务器下发配置
 // ⚠️ 暂时未部署MQTT服务器，保持默认值即可
-#define MQTT_SERVER "10.0.10.13"  // MQTT服务器地址（暂未使用）
+#define MQTT_SERVER "10.0.10.13" // MQTT服务器地址（暂未使用）
 #define MQTT_PORT 1883
 #define MQTT_USER "admin"
 #define MQTT_PASSWORD "2307yU5*"
@@ -42,9 +52,9 @@
 #define USER_ID 0
 
 // MQTT连接参数
-#define MQTT_KEEPALIVE 60          // 心跳间隔（秒）
-#define MQTT_RECONNECT_DELAY 5000  // 重连延迟（毫秒）
-#define MQTT_BUFFER_SIZE 2048      // MQTT消息缓冲区大小 (由512扩容，适配长消息)
+#define MQTT_KEEPALIVE 60         // 心跳间隔（秒）
+#define MQTT_RECONNECT_DELAY 5000 // 重连延迟（毫秒）
+#define MQTT_BUFFER_SIZE 2048     // MQTT消息缓冲区大小 (由512扩容，适配长消息)
 
 // ===== 定时器配置默认值 =====
 #define DEFAULT_SENSOR_INTERVAL 30000
@@ -52,27 +62,36 @@
 #define DEFAULT_GHOST_WINDOW 30000
 
 // ===== 红外配置 =====
-#define IR_RECV_BUFFER_SIZE 1024   // 红外接收缓冲区
-#define IR_RECV_TIMEOUT 50         // 接收超时（毫秒）
-#define IR_CARRIER_FREQ 38         // 载波频率（kHz）
-#define IR_LEARNING_TIMEOUT 30000  // 学习模式超时（30秒）
+#define IR_RECV_BUFFER_SIZE 1024  // 红外接收缓冲区
+#define IR_RECV_TIMEOUT 50        // 接收超时（毫秒）
+#define IR_CARRIER_FREQ 38        // 载波频率（kHz）
+#define IR_LEARNING_TIMEOUT 30000 // 学习模式超时（30秒）
+
+// ===== LED显示配置 =====
+// 42×11宽屏显示（6块IS31FL3733竖向摆放，横向排列）
+#define DISPLAY_WIDTH 42           // 显示宽度（列）
+#define DISPLAY_HEIGHT 11          // 显示高度（行）
+#define LED_CHIP_COUNT 6           // IS31FL3733芯片数量
+#define LED_CHIP_BASE_ADDR 0x50    // 芯片起始I2C地址（0x50-0x55）
+#define LED_BRIGHTNESS_DEFAULT 128 // 默认亮度（0-255）
+#define LED_REFRESH_FPS 30         // 刷新帧率
 
 // ===== 传感器配置 =====
-#define ADC_SAMPLES 10      // ADC采样次数
-#define CURRENT_OFFSET 512  // 电流传感器零点偏移
-#define CURRENT_RATIO 0.01  // 电流转换比例
+#define ADC_SAMPLES 10     // ADC采样次数
+#define CURRENT_OFFSET 512 // 电流传感器零点偏移
+#define CURRENT_RATIO 0.01 // 电流转换比例
 
 // ===== EEPROM存储地址 =====
-#define EEPROM_SIZE 4096     // ✅ 扩容到4KB (ESP8266 Flash支持)
-#define EEPROM_WIFI_SSID 0   // SSID起始地址（最多32字节）
-#define EEPROM_WIFI_PASS 32  // 密码起始地址（最多64字节）
+#define EEPROM_SIZE 4096    // ✅ 扩容到4KB (ESP8266 Flash支持)
+#define EEPROM_WIFI_SSID 0  // SSID起始地址（最多32字节）
+#define EEPROM_WIFI_PASS 32 // 密码起始地址（最多64字节）
 
-#define EEPROM_USER_ID 129    // ✅ 用户ID地址（4字节）
-#define EEPROM_DEVICE_ID 133  // ✅ 设备ID地址（4字节）
+#define EEPROM_USER_ID 129   // ✅ 用户ID地址（4字节）
+#define EEPROM_DEVICE_ID 133 // ✅ 设备ID地址（4字节）
 
 // ===== 调试配置 =====
 #define SERIAL_BAUD 115200
-#define DEBUG_ENABLED true  // 设为false关闭调试输出
+#define DEBUG_ENABLED true // 设为false关闭调试输出
 
 // 调试宏
 #if DEBUG_ENABLED
@@ -85,4 +104,4 @@
 #define DEBUG_PRINTF(...)
 #endif
 
-#endif  // CONFIG_H
+#endif // CONFIG_H

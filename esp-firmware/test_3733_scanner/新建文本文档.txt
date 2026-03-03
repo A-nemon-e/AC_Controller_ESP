@@ -1,0 +1,1241 @@
+/*
+ * IS31FL3733 x4 演示固件
+ * 基于 ESP-12F (ESP8266)，驱动 28x11 LED 屏幕
+ *
+ * 引脚配置:
+ *   - I2C SDA: IO4
+ *   - I2C SCL: IO5
+ *   - SDB: IO0
+ *   - 按钮: IO16 (内部下拉，高电平有效)
+ *
+ * 按钮功能摘要:
+ *   - 短按: 亮屏/息屏
+ *   - 长按: 调节显示亮度
+ *   - 双击: 切换显示模式 (扫描、呼吸、动画、时间、温湿度等)
+ */
+
+#include "is31fl3733.hpp"
+#include <Adafruit_AHTX0.h>
+#include <ESP8266WiFi.h>
+#include <EasyButton.h>
+#include <Wire.h>
+#include <time.h>
+using namespace IS31FL3733;
+Adafruit_AHTX0 aht;
+bool ahtReady = false;
+const char *WIFI_SSID = "TP-LINK_AFC5F2";
+const char *WIFI_PASS = "2002051377";
+bool ntpSynced = false;
+uint32_t ntpLastSyncMs = 0;
+#define NTP_RESYNC_MS (24UL * 3600UL * 1000UL)
+#define PIN_SDA 4
+#define PIN_SCL 5
+#define PIN_SDB 0
+#define PIN_BUTTON 16
+#define NUM_CHIPS 6
+#define CHIP_COLS 7
+#define SCREEN_ROWS 11
+#define SCREEN_COLS 42
+#define GCC_DEFAULT 0xFF
+#define SCAN_DELAY_MS 60
+#define ANIM_MS 18
+static const uint8_t FONT5x7[][7] PROGMEM = {
+    {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
+    {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E},
+    {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F},
+    {0x0E, 0x11, 0x01, 0x06, 0x01, 0x11, 0x0E},
+    {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02},
+    {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E},
+    {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E},
+    {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08},
+    {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E},
+    {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E},
+    {0x04, 0x0A, 0x11, 0x1F, 0x11, 0x11, 0x11},
+    {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E},
+    {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E},
+    {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E},
+    {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F},
+    {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10},
+    {0x0E, 0x11, 0x10, 0x13, 0x11, 0x11, 0x0F},
+    {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11},
+    {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E},
+    {0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C},
+    {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11},
+    {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F},
+    {0x11, 0x1B, 0x15, 0x11, 0x11, 0x11, 0x11},
+    {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11},
+    {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
+    {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10},
+    {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D},
+    {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11},
+    {0x0E, 0x11, 0x10, 0x0E, 0x01, 0x11, 0x0E},
+    {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04},
+    {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
+    {0x11, 0x11, 0x11, 0x0A, 0x0A, 0x04, 0x04},
+    {0x11, 0x11, 0x15, 0x15, 0x15, 0x1B, 0x11},
+    {0x11, 0x0A, 0x04, 0x04, 0x04, 0x0A, 0x11},
+    {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04},
+    {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F},
+};
+static const uint8_t FONT3x5[][5] PROGMEM = {
+    {0x07, 0x05, 0x05, 0x05, 0x07}, {0x02, 0x06, 0x02, 0x02, 0x07},
+    {0x07, 0x01, 0x07, 0x04, 0x07}, {0x07, 0x01, 0x07, 0x01, 0x07},
+    {0x05, 0x05, 0x07, 0x01, 0x01}, {0x07, 0x04, 0x07, 0x01, 0x07},
+    {0x07, 0x04, 0x07, 0x05, 0x07}, {0x07, 0x01, 0x02, 0x02, 0x02},
+    {0x07, 0x05, 0x07, 0x05, 0x07}, {0x07, 0x05, 0x07, 0x01, 0x07},
+    {0x02, 0x05, 0x07, 0x05, 0x05}, {0x06, 0x05, 0x06, 0x05, 0x06},
+    {0x03, 0x04, 0x04, 0x04, 0x03}, {0x06, 0x05, 0x05, 0x05, 0x06},
+    {0x07, 0x04, 0x06, 0x04, 0x07}, {0x07, 0x04, 0x06, 0x04, 0x04},
+    {0x03, 0x04, 0x05, 0x05, 0x03}, {0x05, 0x05, 0x07, 0x05, 0x05},
+    {0x07, 0x02, 0x02, 0x02, 0x07}, {0x01, 0x01, 0x01, 0x05, 0x02},
+    {0x05, 0x05, 0x06, 0x05, 0x05}, {0x04, 0x04, 0x04, 0x04, 0x07},
+    {0x05, 0x07, 0x05, 0x05, 0x05}, {0x05, 0x07, 0x07, 0x05, 0x05},
+    {0x02, 0x05, 0x05, 0x05, 0x02}, {0x06, 0x05, 0x06, 0x04, 0x04},
+    {0x02, 0x05, 0x05, 0x07, 0x03}, {0x06, 0x05, 0x06, 0x05, 0x05},
+    {0x03, 0x04, 0x02, 0x01, 0x06}, {0x07, 0x02, 0x02, 0x02, 0x02},
+    {0x05, 0x05, 0x05, 0x05, 0x02}, {0x05, 0x05, 0x05, 0x02, 0x02},
+    {0x05, 0x05, 0x07, 0x07, 0x05}, {0x05, 0x05, 0x02, 0x05, 0x05},
+    {0x05, 0x05, 0x02, 0x02, 0x02}, {0x07, 0x01, 0x02, 0x04, 0x07},
+};
+static const uint8_t FONT6x9[][9] PROGMEM = {
+    {0x1E, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x1E},
+    {0x0C, 0x1C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3E},
+    {0x1E, 0x33, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x30, 0x3F},
+    {0x1E, 0x33, 0x03, 0x0E, 0x03, 0x03, 0x03, 0x33, 0x1E},
+    {0x06, 0x0E, 0x1E, 0x36, 0x36, 0x3F, 0x06, 0x06, 0x06},
+    {0x3F, 0x30, 0x30, 0x3E, 0x03, 0x03, 0x03, 0x33, 0x1E},
+    {0x1E, 0x33, 0x30, 0x3E, 0x33, 0x33, 0x33, 0x33, 0x1E},
+    {0x3F, 0x03, 0x03, 0x06, 0x0C, 0x18, 0x18, 0x18, 0x18},
+    {0x1E, 0x33, 0x33, 0x1E, 0x33, 0x33, 0x33, 0x33, 0x1E},
+    {0x1E, 0x33, 0x33, 0x1F, 0x03, 0x03, 0x03, 0x33, 0x1E},
+};
+static const uint8_t SYMBOL_DOT[5] PROGMEM = {0x00, 0x00, 0x00, 0x03, 0x03};
+static const uint8_t SYMBOL_PCT[5] PROGMEM = {0x05, 0x01, 0x02, 0x04, 0x05};
+static const uint8_t SYMBOL_CELSIUS[5] PROGMEM = {0x04, 0x0A, 0x05, 0x01, 0x02};
+static const uint8_t ICON_SUN[7] PROGMEM = {0x08, 0x2A, 0x1C, 0x77,
+                                            0x1C, 0x2A, 0x08};
+static const uint8_t ICON_RAIN[7] PROGMEM = {0x00, 0x1C, 0x7F, 0x7F,
+                                             0x08, 0x08, 0x08};
+static const uint8_t ICON_CLOUD[7] PROGMEM = {0x00, 0x00, 0x0E, 0x1F,
+                                              0x7F, 0x7F, 0x7F};
+static const uint8_t ICON_SNOW[7] PROGMEM = {0x08, 0x6B, 0x3E, 0x08,
+                                             0x3E, 0x6B, 0x08};
+uint8_t i2c_write_reg(const uint8_t addr, const uint8_t reg, const uint8_t *buf,
+                      const uint8_t cnt) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  uint8_t n = Wire.write(buf, cnt);
+  Wire.endTransmission();
+  return n;
+}
+uint8_t i2c_read_reg(const uint8_t addr, const uint8_t reg, uint8_t *buf,
+                     const uint8_t cnt) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  Wire.endTransmission();
+  uint8_t n = Wire.requestFrom(addr, cnt);
+  for (uint8_t i = 0; i < n && i < cnt; i++)
+    buf[i] = Wire.read();
+  return n;
+}
+IS31FL3733Driver drv0(ADDR::GND, ADDR::GND, &i2c_read_reg, &i2c_write_reg);
+IS31FL3733Driver drv1(ADDR::SCL, ADDR::GND, &i2c_read_reg, &i2c_write_reg);
+IS31FL3733Driver drv2(ADDR::SDA, ADDR::GND, &i2c_read_reg, &i2c_write_reg);
+IS31FL3733Driver drv3(ADDR::VCC, ADDR::GND, &i2c_read_reg, &i2c_write_reg);
+IS31FL3733Driver drv4(ADDR::GND, ADDR::SCL, &i2c_read_reg, &i2c_write_reg);
+IS31FL3733Driver drv5(ADDR::SCL, ADDR::SCL, &i2c_read_reg, &i2c_write_reg);
+IS31FL3733Driver *drivers[NUM_CHIPS] = {&drv0, &drv1, &drv2,
+                                        &drv3, &drv4, &drv5};
+uint8_t gccValue = GCC_DEFAULT;
+bool screenOn = true;
+int8_t brtDir = -1;
+void applyBrightness() {
+  uint8_t val = screenOn ? gccValue : 0;
+  for (int i = 0; i < NUM_CHIPS; i++)
+    drivers[i]->SetGCC(val);
+}
+uint8_t fb[SCREEN_ROWS][SCREEN_COLS];
+void fbClear() { memset(fb, 0, sizeof(fb)); }
+void fbSet(int x, int y, uint8_t v) {
+  if (x >= 0 && x < SCREEN_COLS && y >= 0 && y < SCREEN_ROWS)
+    fb[y][x] = v;
+}
+void fbRender() {
+  static uint8_t pwmBuf[192];
+  for (uint8_t chip = 0; chip < NUM_CHIPS; chip++) {
+    memset(pwmBuf, 0, 192);
+    for (int8_t sw = CHIP_COLS - 1; sw >= 0; sw--) {
+      uint8_t physX = chip * CHIP_COLS + (CHIP_COLS - 1 - sw);
+      for (uint8_t cs = 0; cs < SCREEN_ROWS; cs++)
+        pwmBuf[sw * 16 + cs] = fb[cs][physX];
+    }
+    drivers[chip]->SetPWM(pwmBuf);
+  }
+}
+void drawChar(int x, int y, char c, uint8_t bri = 0xFF) {
+  int idx = -1;
+  if (c >= '0' && c <= '9')
+    idx = c - '0';
+  else if (c >= 'A' && c <= 'Z')
+    idx = 10 + (c - 'A');
+  else if (c >= 'a' && c <= 'z')
+    idx = 10 + (c - 'a');
+  if (idx < 0)
+    return;
+  for (int r = 0; r < 7; r++) {
+    uint8_t row = pgm_read_byte(&FONT5x7[idx][r]);
+    for (int col = 0; col < 5; col++)
+      if (row & (1 << (4 - col)))
+        fbSet(x + col, y + r, bri);
+  }
+}
+void drawStr(int x, int y, const char *s, uint8_t bri = 0xFF) {
+  while (*s) {
+    drawChar(x, y, *s++, bri);
+    x += 6;
+  }
+}
+int strW(const char *s) {
+  int n = strlen(s);
+  return n > 0 ? n * 6 - 1 : 0;
+}
+int centerX(const char *s) { return (SCREEN_COLS - strW(s)) / 2; }
+void drawCharSmall(int x, int y, char c, uint8_t bri = 0xFF) {
+  int idx = -1;
+  if (c >= '0' && c <= '9')
+    idx = c - '0';
+  else if (c >= 'A' && c <= 'Z')
+    idx = 10 + (c - 'A');
+  else if (c >= 'a' && c <= 'z')
+    idx = 10 + (c - 'a');
+  if (idx < 0)
+    return;
+  for (int r = 0; r < 5; r++) {
+    uint8_t row = pgm_read_byte(&FONT3x5[idx][r]);
+    for (int col = 0; col < 3; col++)
+      if (row & (1 << (2 - col)))
+        fbSet(x + col, y + r, bri);
+  }
+}
+void drawStrSmall(int x, int y, const char *s, uint8_t bri = 0xFF) {
+  while (*s) {
+    drawCharSmall(x, y, *s++, bri);
+    x += 4;
+  }
+}
+int strWSmall(const char *s) {
+  int n = strlen(s);
+  return n > 0 ? n * 4 - 1 : 0;
+}
+int centerXSmall(const char *s) { return (SCREEN_COLS - strWSmall(s)) / 2; }
+void drawSymbol3x5(int x, int y, const uint8_t *sym, uint8_t bri = 0xFF) {
+  for (int r = 0; r < 5; r++) {
+    uint8_t row = pgm_read_byte(sym + r);
+    for (int col = 0; col < 3; col++)
+      if (row & (1 << (2 - col)))
+        fbSet(x + col, y + r, bri);
+  }
+}
+void drawCharBig(int x, int y, int idx, uint8_t bri = 0xFF) {
+  if (idx < 0 || idx > 9)
+    return;
+  for (int r = 0; r < 9; r++) {
+    uint8_t row = pgm_read_byte(&FONT6x9[idx][r]);
+    for (int col = 0; col < 6; col++)
+      if (row & (1 << (5 - col)))
+        fbSet(x + col, y + r, bri);
+  }
+}
+void drawBigHHMM(uint8_t hh, uint8_t mm, uint8_t bri = 0xFF) {
+  int y = 1;
+  int off = 7;
+  drawCharBig(0 + off, y, hh / 10, bri);
+  drawCharBig(6 + off, y, hh % 10, bri);
+  for (int r = 0; r < 9; r++) {
+    if (r == 2 || r == 3 || r == 6 || r == 7) {
+      fbSet(13 + off, y + r, bri);
+      fbSet(14 + off, y + r, bri);
+    }
+  }
+  drawCharBig(16 + off, y, mm / 10, bri);
+  drawCharBig(22 + off, y, mm % 10, bri);
+}
+void drawIcon7x7(int x, int y, const uint8_t *icon, uint8_t bri = 0xFF) {
+  for (int r = 0; r < 7; r++) {
+    uint8_t row = pgm_read_byte(icon + r);
+    for (int col = 0; col < 7; col++)
+      if (row & (1 << (6 - col)))
+        fbSet(x + col, y + r, bri);
+  }
+}
+bool tryNTPServer(const char *server, uint32_t timeout_ms) {
+  configTime(8 * 3600, 0, server);
+  uint32_t start = millis();
+  while (millis() - start < timeout_ms) {
+    time_t now = time(nullptr);
+    if (now > 1000000000UL)
+      return true;
+    delay(100);
+    yield();
+  }
+  return false;
+}
+void setupNTP() {
+  String gw = WiFi.gatewayIP().toString();
+  Serial.printf("[NTP] 尝试网关 %s\n", gw.c_str());
+  if (tryNTPServer(gw.c_str(), 8000)) {
+    Serial.println("[NTP] √ 网关同步成功");
+    ntpSynced = true;
+    ntpLastSyncMs = millis();
+    return;
+  }
+  Serial.println("[NTP] 尝试 ntp.aliyun.com");
+  if (tryNTPServer("ntp.aliyun.com", 8000)) {
+    Serial.println("[NTP] √ 阿里云同步成功");
+    ntpSynced = true;
+    ntpLastSyncMs = millis();
+    return;
+  }
+  Serial.println("[NTP] 尝试 time.nist.gov");
+  if (tryNTPServer("time.nist.gov", 8000)) {
+    Serial.println("[NTP] √ NIST 同步成功");
+    ntpSynced = true;
+    ntpLastSyncMs = millis();
+    return;
+  }
+  Serial.println("[NTP] x 所有服务器均失败");
+  ntpSynced = false;
+}
+void drawColon3x5(int x, int y) {
+  fbSet(x, y + 1, 0xFF);
+  fbSet(x, y + 3, 0xFF);
+}
+static const char *WEEKDAYS[7] = {"SUN", "MON", "TUE", "WED",
+                                  "THU", "FRI", "SAT"};
+void drawColon5x7Buffer(uint8_t buf[SCREEN_ROWS][SCREEN_COLS], int x, int y) {
+  if (x >= 0 && x < SCREEN_COLS) {
+    if (y + 2 >= 0 && y + 2 < SCREEN_ROWS)
+      buf[y + 2][x] = 0xFF;
+    if (y + 4 >= 0 && y + 4 < SCREEN_ROWS)
+      buf[y + 4][x] = 0xFF;
+  }
+}
+void drawCharSmallBuffer(uint8_t buf[SCREEN_ROWS][SCREEN_COLS], int x, int y,
+                         char c, uint8_t bri = 0xFF) {
+  int idx = -1;
+  if (c >= '0' && c <= '9')
+    idx = c - '0';
+  else if (c >= 'A' && c <= 'Z')
+    idx = 10 + (c - 'A');
+  else if (c >= 'a' && c <= 'z')
+    idx = 10 + (c - 'a');
+  if (idx < 0)
+    return;
+  for (int r = 0; r < 5; r++) {
+    uint8_t row = pgm_read_byte(&FONT3x5[idx][r]);
+    for (int col = 0; col < 3; col++) {
+      if (row & (1 << (2 - col))) {
+        if (x + col >= 0 && x + col < SCREEN_COLS && y + r >= 0 &&
+            y + r < SCREEN_ROWS)
+          buf[y + r][x + col] = bri;
+      }
+    }
+  }
+}
+void drawStrSmallBuffer(uint8_t buf[SCREEN_ROWS][SCREEN_COLS], int x, int y,
+                        const char *s, uint8_t bri = 0xFF) {
+  while (*s) {
+    drawCharSmallBuffer(buf, x, y, *s++, bri);
+    x += 4;
+  }
+}
+void drawCharBuffer(uint8_t buf[SCREEN_ROWS][SCREEN_COLS], int x, int y, char c,
+                    uint8_t bri = 0xFF) {
+  int idx = -1;
+  if (c >= '0' && c <= '9')
+    idx = c - '0';
+  else if (c >= 'A' && c <= 'Z')
+    idx = 10 + (c - 'A');
+  else if (c >= 'a' && c <= 'z')
+    idx = 10 + (c - 'a');
+  if (idx < 0)
+    return;
+  for (int r = 0; r < 7; r++) {
+    uint8_t row = pgm_read_byte(&FONT5x7[idx][r]);
+    for (int col = 0; col < 5; col++) {
+      if (row & (1 << (4 - col))) {
+        if (x + col >= 0 && x + col < SCREEN_COLS && y + r >= 0 &&
+            y + r < SCREEN_ROWS)
+          buf[y + r][x + col] = bri;
+      }
+    }
+  }
+}
+void drawStrBuffer(uint8_t buf[SCREEN_ROWS][SCREEN_COLS], int x, int y,
+                   const char *s, uint8_t bri = 0xFF) {
+  while (*s) {
+    drawCharBuffer(buf, x, y, *s++, bri);
+    x += 6;
+  }
+}
+void copyBufferToFb(uint8_t buf[SCREEN_ROWS][SCREEN_COLS]) {
+  memcpy(fb, buf, sizeof(fb));
+}
+extern uint8_t currentMode;
+void processButton();
+void fadeTransition(uint8_t old_fb[SCREEN_ROWS][SCREEN_COLS],
+                    uint8_t new_fb[SCREEN_ROWS][SCREEN_COLS]) {
+  const int duration_ms = 250;
+  uint32_t startMs = millis();
+  while (true) {
+    uint32_t now = millis();
+    int prog = (now - startMs) * 100 / duration_ms;
+    if (prog > 100)
+      prog = 100;
+    for (int y = 0; y < SCREEN_ROWS; y++) {
+      for (int x = 0; x < SCREEN_COLS; x++) {
+        uint32_t o = old_fb[y][x];
+        uint32_t n = new_fb[y][x];
+        fb[y][x] = (uint8_t)((o * (100 - prog) + n * prog) / 100);
+      }
+    }
+    fbRender();
+    processButton();
+    if (currentMode != 3)
+      return;
+    if (prog >= 100)
+      break;
+    yield();
+  }
+  copyBufferToFb(new_fb);
+  fbRender();
+}
+enum NtpState { SHOW_TIME, SHOW_DATE };
+uint8_t ntp_current_fb[SCREEN_ROWS][SCREEN_COLS];
+uint8_t ntp_next_fb[SCREEN_ROWS][SCREEN_COLS];
+void runNTPClock() {
+  static uint32_t lastSec = 0xFFFFFFFFUL;
+  static NtpState dispState = SHOW_TIME;
+  static uint32_t stateStartMs = millis();
+  static bool firstFrame = true;
+  if (firstFrame) {
+    memset(ntp_current_fb, 0, sizeof(ntp_current_fb));
+    copyBufferToFb(ntp_current_fb);
+    fbRender();
+    firstFrame = false;
+  }
+  if (ntpSynced && millis() - ntpLastSyncMs > NTP_RESYNC_MS) {
+    ntpSynced = false;
+    setupNTP();
+  }
+  time_t now = time(nullptr);
+  uint32_t sec = (uint32_t)now;
+  uint32_t elapsed = millis() - stateStartMs;
+  if (dispState == SHOW_TIME && elapsed > 8000) {
+    dispState = SHOW_DATE;
+    stateStartMs = millis();
+  } else if (dispState == SHOW_DATE && elapsed > 2000) {
+    dispState = SHOW_TIME;
+    stateStartMs = millis();
+  }
+  static NtpState lastDispState = SHOW_TIME;
+  if (sec == lastSec && dispState == lastDispState)
+    return;
+  lastSec = sec;
+  lastDispState = dispState;
+  struct tm *ti = localtime(&now);
+  memset(ntp_next_fb, 0, sizeof(ntp_next_fb));
+  if (!ntpSynced || now < 1000000000UL) {
+    drawStrSmallBuffer(ntp_next_fb, 8, 0, "---");
+    if (0 + 1 < SCREEN_ROWS)
+      ntp_next_fb[0 + 1][20] = 0xFF;
+    if (0 + 3 < SCREEN_ROWS)
+      ntp_next_fb[0 + 3][20] = 0xFF;
+    drawStrSmallBuffer(ntp_next_fb, 22, 0, "---");
+    drawStrSmallBuffer(ntp_next_fb, 9, 6, "NTP...");
+  } else {
+    if (dispState == SHOW_TIME) {
+      int x = 2;
+      int y = 2;
+      char d2[3];
+      d2[0] = '0' + ti->tm_hour / 10;
+      d2[1] = '0' + ti->tm_hour % 10;
+      d2[2] = 0;
+      drawStrBuffer(ntp_next_fb, x, y, d2);
+      x += 12;
+      drawColon5x7Buffer(ntp_next_fb, x, y);
+      x += 2;
+      d2[0] = '0' + ti->tm_min / 10;
+      d2[1] = '0' + ti->tm_min % 10;
+      d2[2] = 0;
+      drawStrBuffer(ntp_next_fb, x, y, d2);
+      x += 12;
+      drawColon5x7Buffer(ntp_next_fb, x, y);
+      x += 2;
+      d2[0] = '0' + ti->tm_sec / 10;
+      d2[1] = '0' + ti->tm_sec % 10;
+      d2[2] = 0;
+      drawStrBuffer(ntp_next_fb, x, y, d2);
+    } else {
+      char dbuf[16];
+      snprintf(dbuf, sizeof(dbuf), "%02d-%02d %s", ti->tm_mon + 1, ti->tm_mday,
+               WEEKDAYS[ti->tm_wday]);
+      int dw = strWSmall(dbuf);
+      drawStrSmallBuffer(ntp_next_fb, (SCREEN_COLS - dw) / 2, 3, dbuf);
+    }
+  }
+  fadeTransition(ntp_current_fb, ntp_next_fb);
+  memcpy(ntp_current_fb, ntp_next_fb, sizeof(ntp_current_fb));
+}
+void enterNTPMode() {
+  Serial.println("[模式3] NTP 时钟");
+  initAllChips();
+  extern uint8_t ntp_current_fb[SCREEN_ROWS][SCREEN_COLS];
+  memset(ntp_current_fb, 0, sizeof(ntp_current_fb));
+  fbClear();
+  fbRender();
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.printf("[WiFi] 连 %s ...\n", WIFI_SSID);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    uint32_t t = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
+      delay(200);
+      yield();
+      Serial.print('.');
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[WiFi] Connected, IP=%s\n",
+                    WiFi.localIP().toString().c_str());
+      setupNTP();
+    } else {
+      Serial.println("[WiFi] 连接超时");
+    }
+  } else if (!ntpSynced) {
+    setupNTP();
+  }
+}
+void scrollStringSmall(int x, int y, const char *s) { drawStrSmall(x, y, s); }
+void runAHTMode() {
+  static uint32_t lastReadMs = 0;
+  static float lastTemp = -999;
+  static float lastHum = -999;
+  if (millis() - lastReadMs > 2000) {
+    lastReadMs = millis();
+    if (ahtReady) {
+      sensors_event_t h, t;
+      aht.getEvent(&h, &t);
+      lastTemp = t.temperature;
+      lastHum = h.relative_humidity;
+    }
+  }
+  fbClear();
+  if (!ahtReady) {
+    drawStrSmall(centerXSmall("NA SENSOR"), 3, "NA SENSOR");
+  } else {
+    int off = 7;
+    int tx = 4 + off;
+    char tbuf[10];
+    snprintf(tbuf, sizeof(tbuf), "T: %d", (int)lastTemp);
+    drawStrSmall(tx, 0, tbuf);
+    tx += strWSmall(tbuf);
+    drawSymbol3x5(tx + 1, 0, SYMBOL_DOT);
+    tx += 5;
+    snprintf(tbuf, sizeof(tbuf), "%d", (int)(lastTemp * 10) % 10);
+    drawStrSmall(tx, 0, tbuf);
+    tx += 4;
+    drawSymbol3x5(tx, 0, SYMBOL_CELSIUS);
+    int hx = 4 + off;
+    char hbuf[10];
+    snprintf(hbuf, sizeof(hbuf), "H: %d", (int)lastHum);
+    drawStrSmall(hx, 6, hbuf);
+    hx += strWSmall(hbuf);
+    drawSymbol3x5(hx + 1, 6, SYMBOL_DOT);
+    hx += 5;
+    snprintf(hbuf, sizeof(hbuf), "%d", (int)(lastHum * 10) % 10);
+    drawStrSmall(hx, 6, hbuf);
+    hx += 4;
+    drawSymbol3x5(hx, 6, SYMBOL_PCT);
+  }
+  fbRender();
+}
+void enterAHTMode() {
+  Serial.println("[Mode 4] AHT20 Temp & Hum");
+  initAllChips();
+  fbClear();
+  fbRender();
+  if (!ahtReady) {
+    if (aht.begin()) {
+      Serial.println("[AHT20] Init Success");
+      ahtReady = true;
+    } else {
+      Serial.println("[AHT20] No sensor found");
+    }
+  }
+}
+float matrixDrops[SCREEN_COLS];
+float matrixSpeeds[SCREEN_COLS];
+void enterMatrixRain() {
+  Serial.println("[Mode 5] Matrix Rain");
+  initAllChips();
+  for (int x = 0; x < SCREEN_COLS; x++) {
+    matrixDrops[x] = random(-20, 0);
+    matrixSpeeds[x] = random(20, 80) / 100.0f; // 0.2 to 0.8
+  }
+}
+void runMatrixRain() {
+  static uint32_t lastFrame = 0;
+  if (millis() - lastFrame < 30)
+    return;
+  lastFrame = millis();
+  for (int y = 0; y < SCREEN_ROWS; y++) {
+    for (int x = 0; x < SCREEN_COLS; x++) {
+      uint8_t v = fb[y][x];
+      if (v > 20)
+        fb[y][x] = v - 20;
+      else
+        fb[y][x] = 0;
+    }
+  }
+  for (int x = 0; x < SCREEN_COLS; x++) {
+    if (random(100) > 95)
+      continue;
+    matrixDrops[x] += matrixSpeeds[x];
+    int iy = (int)matrixDrops[x];
+    if (iy >= 0 && iy < SCREEN_ROWS) {
+      fbSet(x, iy, 255);
+    }
+    if (matrixDrops[x] > SCREEN_ROWS + 5) {
+      if (random(100) > 80) {
+        matrixDrops[x] = random(-5, 0);
+        matrixSpeeds[x] = random(20, 80) / 100.0f;
+      }
+    }
+  }
+  fbRender();
+}
+void enterWaterRipples() {
+  Serial.println("[Mode 6] Water Ripples");
+  initAllChips();
+}
+void runWaterRipples() {
+  static float t = 0;
+  float cx = SCREEN_COLS / 2.0f - 0.5f;
+  float cy = SCREEN_ROWS / 2.0f - 0.5f;
+  t += 0.15f;
+  if (t > M_PI * 2) {
+    t -= M_PI * 2;
+  }
+  for (int y = 0; y < SCREEN_ROWS; y++) {
+    for (int x = 0; x < SCREEN_COLS; x++) {
+      float dx = x - cx;
+      float dy = y - cy;
+      float dist = sqrtf(dx * dx + dy * dy);
+      float val = sinf(dist * 0.8f - t);
+      uint8_t bri = (uint8_t)((val + 1.0f) * 127.5f);
+      fbSet(x, y, bri);
+    }
+  }
+  if (ntpSynced) {
+    time_t now = time(nullptr);
+    struct tm *ti = localtime(&now);
+    drawBigHHMM(ti->tm_hour, ti->tm_min, 0);
+  }
+  fbRender();
+  smartDelay(20);
+}
+float barCurrentH[6];
+float barTargetH[6];
+const int barCenters[6] = {3, 10, 17, 24, 31, 38};
+void enterAudioBars() {
+  Serial.println("[模式7] 光晕跳动?");
+  initAllChips();
+  for (int i = 0; i < 6; i++) {
+    barCurrentH[i] = 0;
+    barTargetH[i] = random(2, 9);
+  }
+}
+void runAudioBars() {
+  static uint32_t lastFrame = 0;
+  if (millis() - lastFrame < 40)
+    return;
+  lastFrame = millis();
+  for (int i = 0; i < 6; i++) {
+    barCurrentH[i] += (barTargetH[i] - barCurrentH[i]) * 0.15f;
+    if (abs(barTargetH[i] - barCurrentH[i]) < 0.5f) {
+      if (random(100) > 60)
+        barTargetH[i] = random(1, 11);
+      else
+        barTargetH[i] = 1;
+    }
+  }
+  fbClear();
+  for (int y = 0; y < SCREEN_ROWS; y++) {
+    float h = SCREEN_ROWS - 1 - y;
+    for (int x = 0; x < SCREEN_COLS; x++) {
+      float totalBri = 0;
+      for (int i = 0; i < 6; i++) {
+        if (h <= barCurrentH[i]) {
+          float distX = abs(x - barCenters[i]);
+          float b = 255.0f * expf(-distX * 0.6f);
+          totalBri += b;
+        }
+      }
+      if (totalBri > 255)
+        totalBri = 255;
+      fbSet(x, y, (uint8_t)totalBri);
+    }
+  }
+  fbRender();
+}
+void enterGaussianBlur() {
+  Serial.println("[模式8] 高斯模糊轜");
+  initAllChips();
+  fbClear();
+}
+void runGaussianBlur() {
+  static int state = 0;
+  static int blurTicks = 0;
+  static uint32_t lastFrame = 0;
+  const char *wordA = "ESP8G";
+  const char *wordB = "3733";
+  if (millis() - lastFrame < 50)
+    return;
+  lastFrame = millis();
+  if (state == 0) {
+    fbClear();
+    drawStr(centerX(wordA), 2, wordA);
+    fbRender();
+    smartDelay(2000);
+    state = 1;
+    blurTicks = 0;
+  } else if (state == 2) {
+    fbClear();
+    drawBigHHMM(12, 34);
+    fbRender();
+    smartDelay(2000);
+    state = 3;
+    blurTicks = 0;
+  } else if (state == 1 || state == 3) {
+    uint8_t temp[SCREEN_ROWS][SCREEN_COLS];
+    for (int y = 0; y < SCREEN_ROWS; y++) {
+      for (int x = 0; x < SCREEN_COLS; x++) {
+        uint32_t sum = 0;
+        uint32_t weightSum = 0;
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            int nx = x + dx;
+            int ny = y + dy;
+            if (nx >= 0 && nx < SCREEN_COLS && ny >= 0 && ny < SCREEN_ROWS) {
+              uint8_t weight = 1;
+              if (dx == 0 && dy == 0)
+                weight = 4;
+              else if (dx == 0 || dy == 0)
+                weight = 2;
+              sum += fb[ny][nx] * weight;
+              weightSum += weight;
+            }
+          }
+        }
+        temp[y][x] = (uint8_t)(sum / weightSum);
+      }
+    }
+    for (int y = 0; y < SCREEN_ROWS; y++) {
+      for (int x = 0; x < SCREEN_COLS; x++) {
+        uint8_t v = temp[y][x];
+        fb[y][x] = (v > 3) ? (v - 3) : 0;
+      }
+    }
+    fbRender();
+    blurTicks++;
+    if (blurTicks > 20) {
+      if (state == 1)
+        state = 2;
+      else
+        state = 0;
+    }
+  }
+}
+uint8_t currentMode = 0;
+void initAllChips() {
+  for (int i = 0; i < NUM_CHIPS; i++) {
+    drivers[i]->Init();
+    drivers[i]->SetGCC(gccValue);
+    drivers[i]->SetLEDMatrixState(LED_STATE::ON);
+    drivers[i]->SetLEDMatrixPWM(0);
+  }
+}
+void clearAll() {
+  for (int i = 0; i < NUM_CHIPS; i++)
+    drivers[i]->SetLEDMatrixPWM(0);
+}
+void enterScanMode() {
+  Serial.println("[模式0] 逐点扏");
+  initAllChips();
+}
+void enterTextMode() {
+  Serial.println("[模式2] 文字动画");
+  initAllChips();
+  fbClear();
+}
+void enterBreathMode() {
+  Serial.println("[模式1] ABM 同呼吸");
+  ABM_CONFIG cfg;
+  cfg.T1 = T1_840MS;
+  cfg.T2 = T2_210MS;
+  cfg.T3 = T3_840MS;
+  cfg.T4 = T4_420MS;
+  cfg.Tbegin = LOOP_BEGIN_T1;
+  cfg.Tend = LOOP_END_T3;
+  cfg.Times = (uint16_t)ABM_LOOP_FOREVER;
+  for (int i = 0; i < NUM_CHIPS; i++) {
+    drivers[i]->Init();
+    drivers[i]->WritePagedReg(PAGEDREGISTER::CR, (i == 0) ? 0x41 : 0x81);
+    drivers[i]->SetGCC(gccValue);
+    drivers[i]->SetLEDMatrixState(LED_STATE::ON);
+    drivers[i]->SetLEDMatrixPWM(0xFF);
+    drivers[i]->ConfigABM(ABM_NUM::NUM_1, &cfg);
+    drivers[i]->SetLEDMatrixMode(LED_MODE::ABM1);
+  }
+  for (int i = NUM_CHIPS - 1; i >= 0; i--) {
+    uint8_t cr = (i == 0) ? 0x43 : 0x83;
+    drivers[i]->WritePagedReg(PAGEDREGISTER::CR, cr & ~0x02);
+    drivers[i]->WritePagedReg(PAGEDREGISTER::CR, cr);
+    drivers[i]->WritePagedReg(PAGEDREGISTER::TUR, 0x00);
+    Serial.printf("  chip%d %s CR=0x%02X\n", i, i == 0 ? "MASTER" : "SLAVE",
+                  cr);
+  }
+}
+#define BTN_DEBOUNCE_MS 35
+#define BTN_LONG_MS 800
+#define BTN_DOUBLE_MS 400
+#define BTN_BRT_MS 30
+EasyButton btn(PIN_BUTTON, BTN_DEBOUNCE_MS, false, false);
+static bool _brtBounced = false;
+static uint32_t _brtMs = 0;
+void doShortPress() {
+  screenOn = !screenOn;
+  applyBrightness();
+  Serial.printf("[\u6309\u952e] \u77ed\u6309 \u2192 \u5c4f\u5e55%s\n",
+                screenOn ? "\u5f00" : "\u5173");
+}
+void doDoubleClick() {
+  if (!screenOn)
+    return;
+  currentMode = (currentMode + 1) % 9;
+  Serial.printf("[按键] 双击 ?模式%d\n", currentMode);
+  if (currentMode == 0)
+    enterScanMode();
+  else if (currentMode == 1)
+    enterBreathMode();
+  else if (currentMode == 2)
+    enterTextMode();
+  else if (currentMode == 3)
+    enterNTPMode();
+  else if (currentMode == 4)
+    enterAHTMode();
+  else if (currentMode == 5)
+    enterMatrixRain();
+  else if (currentMode == 6)
+    enterWaterRipples();
+  else if (currentMode == 7)
+    enterAudioBars();
+  else if (currentMode == 8)
+    enterGaussianBlur();
+}
+void doLongPressStep() {
+  if (!screenOn || _brtBounced)
+    return;
+  int step = max(1, (int)(8.0f * sqrtf((float)gccValue / 255.0f) + 0.5f));
+  int v = (int)gccValue + brtDir * step;
+  if (v >= 255) {
+    v = 255;
+    _brtBounced = true;
+  } else if (v <= 1) {
+    v = 1;
+    _brtBounced = true;
+  }
+  gccValue = (uint8_t)v;
+  applyBrightness();
+  Serial.printf("[\u6309\u952e] \u957f\u6309 \u2192 GCC=%d(step=%d)\n",
+                gccValue, step);
+}
+static bool _pendingShort = false;
+static uint32_t _pendingMs = 0;
+void setupButton() {
+  btn.onPressed([]() {
+    _pendingShort = true;
+    _pendingMs = millis();
+  });
+  btn.onSequence(2, BTN_DOUBLE_MS, []() {
+    if (!screenOn)
+      return;
+    _pendingShort = false;
+    doDoubleClick();
+  });
+  btn.onPressedFor(BTN_LONG_MS, []() {
+    _pendingShort = false;
+    if (!screenOn)
+      return;
+    _brtBounced = false;
+    brtDir = -brtDir;
+    _brtMs = millis() - BTN_BRT_MS;
+    Serial.printf("[按键] 长按?dir=%d\n", brtDir);
+  });
+  btn.begin();
+}
+void processButton() {
+  btn.read();
+  if (_pendingShort && millis() - _pendingMs >= BTN_DOUBLE_MS) {
+    _pendingShort = false;
+    doShortPress();
+  }
+  if (screenOn && btn.pressedFor(BTN_LONG_MS)) {
+    if (!_brtBounced && millis() - _brtMs >= BTN_BRT_MS) {
+      _brtMs = millis();
+      doLongPressStep();
+    }
+  }
+  if (btn.wasReleased()) {
+    _brtBounced = false;
+  }
+}
+void smartDelay(uint32_t ms) {
+  uint32_t start = millis();
+  while (millis() - start < ms) {
+    processButton();
+    yield();
+  }
+}
+void slideIn(const char *s, int y = 2) {
+  int tx = centerX(s);
+  for (int x = SCREEN_COLS; x > tx; x -= 2) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStr(x, y, s);
+    fbRender();
+    smartDelay(ANIM_MS);
+  }
+  fbClear();
+  drawStr(tx, y, s);
+  fbRender();
+}
+void slideOut(const char *s, int y = 2) {
+  int sx = centerX(s);
+  for (int x = sx; x >= -(strW(s) + 1); x -= 2) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStr(x, y, s);
+    fbRender();
+    smartDelay(ANIM_MS);
+  }
+  fbClear();
+  fbRender();
+}
+void fadeIn(const char *s, int y = 2) {
+  int cx = centerX(s);
+  for (int b = 0; b <= 255; b += 20) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStr(cx, y, s, (uint8_t)min(b, 255));
+    fbRender();
+    smartDelay(ANIM_MS / 2);
+  }
+}
+void fadeOut(const char *s, int y = 2) {
+  int cx = centerX(s);
+  for (int b = 255; b >= 0; b -= 20) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStr(cx, y, s, (uint8_t)max(b, 0));
+    fbRender();
+    smartDelay(ANIM_MS / 2);
+  }
+  fbClear();
+  fbRender();
+}
+void twoLine(const char *top, const char *bot, int holdMs = 400) {
+  int tx = centerXSmall(top), bx = centerXSmall(bot);
+  for (int x = SCREEN_COLS; x > tx; x -= 2) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStrSmall(x, 0, top);
+    fbRender();
+    smartDelay(ANIM_MS);
+  }
+  fbClear();
+  drawStrSmall(tx, 0, top);
+  fbRender();
+  for (int x = -(strWSmall(bot) + 1); x < bx; x += 2) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStrSmall(tx, 0, top);
+    drawStrSmall(x, 6, bot);
+    fbRender();
+    smartDelay(ANIM_MS);
+  }
+  fbClear();
+  drawStrSmall(tx, 0, top);
+  drawStrSmall(bx, 6, bot);
+  fbRender();
+  for (int t = 0; t < holdMs; t += 50) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    smartDelay(50);
+  }
+  for (int b = 255; b >= 0; b -= 20) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    fbClear();
+    drawStrSmall(tx, 0, top, (uint8_t)max(b, 0));
+    drawStrSmall(bx, 6, bot, (uint8_t)max(b, 0));
+    fbRender();
+    smartDelay(ANIM_MS);
+  }
+  fbClear();
+  fbRender();
+}
+void demoBigFont() {
+  const uint8_t pairs[3][2] = {{0, 0}, {12, 34}, {23, 59}};
+  for (int p = 0; p < 3; p++) {
+    uint8_t hh = pairs[p][0], mm = pairs[p][1];
+    for (int b = 0; b <= 255; b += 15) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      fbClear();
+      drawBigHHMM(hh, mm, (uint8_t)min(b, 255));
+      fbRender();
+      smartDelay(ANIM_MS);
+    }
+    for (int t = 0; t < 400; t += 50) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      smartDelay(50);
+    }
+    for (int b = 255; b >= 0; b -= 15) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      fbClear();
+      drawBigHHMM(hh, mm, (uint8_t)max(b, 0));
+      fbRender();
+      smartDelay(ANIM_MS);
+    }
+    fbClear();
+    fbRender();
+  }
+}
+void demoIcons() {
+  const uint8_t *icons[4] = {ICON_SUN, ICON_RAIN, ICON_CLOUD, ICON_SNOW};
+  const char *labels[4] = {"SUNNY", "RAIN", "CLOUD", "SNOW"};
+  for (int i = 0; i < 4; i++) {
+    processButton();
+    if (currentMode != 2)
+      return;
+    int off = 7;
+    int lxT = 9 + off;
+    for (int b = 0; b <= 255; b += 20) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      fbClear();
+      drawIcon7x7(0 + off, 2, icons[i], (uint8_t)min(b, 255));
+      fbRender();
+      smartDelay(ANIM_MS);
+    }
+    for (int lx = SCREEN_COLS; lx > lxT; lx -= 2) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      fbClear();
+      drawIcon7x7(0 + off, 2, icons[i]);
+      drawStrSmall(lx, 4, labels[i]);
+      fbRender();
+      smartDelay(ANIM_MS);
+    }
+    fbClear();
+    drawIcon7x7(0 + off, 2, icons[i]);
+    drawStrSmall(lxT, 4, labels[i]);
+    fbRender();
+    for (int t = 0; t < 500; t += 50) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      smartDelay(50);
+    }
+    for (int b = 255; b >= 0; b -= 20) {
+      processButton();
+      if (currentMode != 2)
+        return;
+      fbClear();
+      drawIcon7x7(0 + off, 2, icons[i], (uint8_t)max(b, 0));
+      drawStrSmall(lxT, 4, labels[i], (uint8_t)max(b, 0));
+      fbRender();
+      smartDelay(ANIM_MS);
+    }
+    fbClear();
+    fbRender();
+  }
+}
+void runTextDemo() {
+  demoBigFont();
+  processButton();
+  if (currentMode != 2)
+    return;
+  demoIcons();
+  processButton();
+  if (currentMode != 2)
+    return;
+  fadeIn("HELLO");
+  smartDelay(250);
+  processButton();
+  if (currentMode != 2)
+    return;
+  fadeOut("HELLO");
+  slideIn("WORLD");
+  smartDelay(250);
+  processButton();
+  if (currentMode != 2)
+    return;
+  slideOut("WORLD");
+  char grp[5] = {0, 0, 0, 0, 0};
+  for (int i = 0; i <= 9; i += 4) {
+    grp[0] = '0' + i;
+    grp[1] = (i + 1 <= 9) ? '0' + i + 1 : ' ';
+    grp[2] = (i + 2 <= 9) ? '0' + i + 2 : ' ';
+    grp[3] = (i + 3 <= 9) ? '0' + i + 3 : ' ';
+    slideIn(grp);
+    smartDelay(150);
+    processButton();
+    if (currentMode != 2)
+      return;
+    fadeOut(grp);
+    processButton();
+    if (currentMode != 2)
+      return;
+  }
+  twoLine("HELLO", "WORLD", 400);
+  processButton();
+  if (currentMode != 2)
+    return;
+  twoLine("LED", "DEMO", 400);
+  processButton();
+  if (currentMode != 2)
+    return;
+  twoLine("28X11", "ESP8G", 400);
+  processButton();
+  if (currentMode != 2)
+    return;
+  char trio[4] = {0, 0, 0, 0};
+  for (int i = 0; i < 26; i += 3) {
+    trio[0] = 'A' + i;
+    trio[1] = (i + 1 < 26) ? 'A' + i + 1 : ' ';
+    trio[2] = (i + 2 < 26) ? 'A' + i + 2 : ' ';
+    slideIn(trio);
+    smartDelay(200);
+    processButton();
+    if (currentMode != 2)
+      return;
+    fadeOut(trio);
+    processButton();
+    if (currentMode != 2)
+      return;
+  }
+  smartDelay(200);
+}
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  pinMode(PIN_SDB, OUTPUT);
+  digitalWrite(PIN_SDB, HIGH);
+  delay(10);
+  setupButton();
+  Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(400000);
+  delay(50);
+  Serial.println("IS31FL3733x4 Tester - ESP-12F");
+  Serial.printf(
+      "I2C Addr: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X - Screen %dx%d\n",
+      drv0.GetI2CAddress(), drv1.GetI2CAddress(), drv2.GetI2CAddress(),
+      drv3.GetI2CAddress(), drv4.GetI2CAddress(), drv5.GetI2CAddress(),
+      SCREEN_COLS, SCREEN_ROWS);
+  Serial.println("Buttons(IO16): short=power long=dim double=mode");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.printf("[WiFi] Connect %s ...\n", WIFI_SSID);
+  enterScanMode();
+}
+void loop() {
+  processButton();
+  static bool wifiWasConnected = false;
+  if (!wifiWasConnected && WiFi.status() == WL_CONNECTED) {
+    wifiWasConnected = true;
+    Serial.printf("[WiFi] Connected, IP=%s\n",
+                  WiFi.localIP().toString().c_str());
+    setupNTP();
+  }
+  if (currentMode == 0) {
+    for (uint8_t cs = 0; cs < SCREEN_ROWS; cs++) {
+      for (uint8_t chip = 0; chip < NUM_CHIPS; chip++) {
+        for (int8_t sw = CHIP_COLS - 1; sw >= 0; sw--) {
+          processButton();
+          if (currentMode != 0)
+            return;
+          clearAll();
+          drivers[chip]->SetLEDSinglePWM(cs, (uint8_t)sw, 0xFF);
+          smartDelay(SCAN_DELAY_MS);
+        }
+      }
+    }
+    clearAll();
+    smartDelay(300);
+  } else if (currentMode == 2) {
+    runTextDemo();
+  } else if (currentMode == 3) {
+    processButton();
+    if (currentMode != 3)
+      return;
+    runNTPClock();
+  } else if (currentMode == 4) {
+    processButton();
+    if (currentMode != 4)
+      return;
+    runAHTMode();
+  } else if (currentMode == 5) {
+    processButton();
+    if (currentMode != 5)
+      return;
+    runMatrixRain();
+  } else if (currentMode == 6) {
+    processButton();
+    if (currentMode != 6)
+      return;
+    runWaterRipples();
+  } else if (currentMode == 7) {
+    processButton();
+    if (currentMode != 7)
+      return;
+    runAudioBars();
+  } else if (currentMode == 8) {
+    processButton();
+    if (currentMode != 8)
+      return;
+    runGaussianBlur();
+  }
+}

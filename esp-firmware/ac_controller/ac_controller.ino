@@ -24,10 +24,13 @@
 #include "led_indicator.h"
 #include "mqtt_client.h"
 
+#include "i2c_scanner.h" // I2C设备扫描工具
+#include "led_driver.h"  // LED矩阵驱动
 #include "sensors.h"
 #include "state_manager.h"
 #include "wifi_manager.h"
 #include <ArduinoJson.h> // ✅ 新增：JSON库
+#include <Wire.h>        // I2C库（用于AHT20和IS31FL3733）
 
 // ===== 全局变量定义 =====
 // 定时器配置（可通过MQTT动态修改）
@@ -67,6 +70,31 @@ void setup() {
 
   // 3. 初始化LED指示
   LEDIndicator::init();
+
+  // 3.5 初始化LED显示系统（新增 - 42×11宽屏）
+  DEBUG_PRINTLN("[主程序] 初始化LED显示系统...");
+
+  // 启用IS31FL3733芯片（SDB引脚拉高）
+  pinMode(PIN_SDB, OUTPUT);
+  digitalWrite(PIN_SDB, HIGH);
+  DEBUG_PRINTLN("[主程序] ✅ SDB引脚拉高，IS31FL3733已启用");
+  delay(100); // 等待芯片稳定
+
+  // 初始化I2C总线（400kHz快速模式，复用AHT20和IS31FL3733）
+  Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(I2C_CLOCK_SPEED);
+  DEBUG_PRINTF("[主程序] ✅ I2C已初始化: SDA=%d, SCL=%d, 速度=%dkHz\n", PIN_SDA,
+               PIN_SCL, I2C_CLOCK_SPEED / 1000);
+
+  // 扫描I2C总线上的所有设备
+  I2CScanner::scan();
+
+  // 3.6 初始化LED驱动（新增 - 步骤3）
+  LEDDriver::init();
+
+  // 测试：点亮左上角LED
+  LEDDriver::test();
+  DEBUG_PRINTLN("[主程序] ✅ LED驱动测试完成");
 
   // 4. 连接WiFi
   WiFiManager::connect();
