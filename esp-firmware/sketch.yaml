@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Sketch
+metadata:
+  name: test_phase1
+profiles:
+  default:
+    fqbn: esp8266:esp8266:nodemcuv2
+    platforms:
+      - platform: esp8266:esp8266 (3.1.2)
+    libraries:
+      - source: lib/IS31FL3733
+      - source: lib/LEDMatrix
+      - source: lib/FontRenderer
+      - source: lib/DisplayConfig
