@@ -298,6 +298,80 @@ cd AC_Controller_ESP/ac-iot-frontend
 npm run build
 ```
 
+### 8.3 前端部署到Apache（生产环境）
+
+**目标服务器**: 10.0.10.13:8222  
+**Apache端口**: 6077  
+**部署用户**: apache.root
+
+#### 步骤1: 编译前端
+```bash
+cd AC_Controller_ESP/ac-iot-frontend
+npm install
+npm run build
+# 生成目录: dist/ 或 build/
+```
+
+#### 步骤2: 查看Apache配置（在服务器上执行）
+```bash
+ssh -p 8222 apache.root@10.0.10.13
+# 输入密码（查看密码管理工具）
+
+# 查找Apache配置文件
+grep -r "6077" /etc/apache2/sites-enabled/
+grep -r "DocumentRoot" /etc/apache2/sites-enabled/
+
+# 常见路径示例:
+# /etc/apache2/sites-enabled/001-ac-frontend.conf
+# DocumentRoot /var/www/ac-frontend/html
+```
+
+#### 步骤3: 部署前端文件
+```bash
+# 在服务器上执行
+sudo systemctl stop apache2
+
+# 备份旧版本
+cd /var/www/ac-frontend/html
+sudo tar -czf backup_$(date +%Y%m%d_%H%M%S).tar.gz .
+
+# 清空旧文件
+sudo rm -rf /var/www/ac-frontend/html/*
+
+# 复制新文件（从本地scp到服务器）
+# 在本地执行:
+scp -P 8222 -r AC_Controller_ESP/ac-iot-frontend/dist/* apache.root@10.0.10.13:/var/www/ac-frontend/html/
+
+# 设置权限
+sudo chown -R www-data:www-data /var/www/ac-frontend/html
+sudo chmod -R 755 /var/www/ac-frontend/html
+```
+
+#### 步骤4: 重启Apache
+```bash
+sudo systemctl start apache2
+# 或 reload（不中断服务）
+sudo systemctl reload apache2
+
+# 检查状态
+sudo systemctl status apache2
+```
+
+#### 步骤5: 验证部署
+```bash
+# 检查端口监听
+sudo netstat -tlnp | grep 6077
+
+# 访问测试
+curl http://localhost:6077
+```
+
+**注意事项**:
+- 部署前务必备份
+- 确保后端服务也在运行（同服务器）
+- 检查防火墙是否开放6077端口
+- 如有CDN需刷新缓存
+
 ### 8.2 目录结构速查
 
 ```
