@@ -14,11 +14,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "../IS31FL3733/IS31FL3733.h"
-
-// 屏幕尺寸定义
-#define SCREEN_ROWS 11
-#define SCREEN_COLS 42
-#define NUM_CHIPS 6
+#include "config_pins.h"
 
 // 错误码定义
 enum class LEDMatrixError {
@@ -187,7 +183,7 @@ private:
     static uint8_t buffer[SCREEN_ROWS][SCREEN_COLS];
     
     // IS31FL3733驱动实例
-    static IS31FL3733Driver* drivers[NUM_CHIPS];
+    static IS31FL3733::IS31FL3733Driver* drivers[NUM_CHIPS];
     
     // 状态
     static bool initialized;

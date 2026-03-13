@@ -1,281 +1,53 @@
 <template>
   <div class="settings-page">
-    <!-- 设备管理 -->
-    <van-cell-group inset title="设备管理">
-        <van-cell
-          v-for="device in devices"
-          :key="device.id"
-          :title="device.name"
-          :label="`UUID: ${device.uuid}`"
-          @click="viewDevice(device.id)"
-        >
-          <template #right-icon>
-            <div class="cell-actions">
-               <van-icon name="setting-o" size="24" color="#1989fa" @click.stop="openSetup(device)" class="action-icon" />
-               <van-icon name="arrow" class="arrow-icon" />
-            </div>
-          </template>
-        </van-cell>
-      <van-cell title="添加新设备" is-link icon="plus" @click="showAddDevice = true" />
+    <!-- 用户信息 -->
+    <van-cell-group inset title="用户信息">
+      <van-cell title="用户名" :value="authStore.user?.username || '未登录'" />
+      <van-cell title="角色" :value="authStore.user?.role || '-'" />
     </van-cell-group>
 
-    <!-- 用户设置 -->
-    <van-cell-group inset title="用户设置">
-      <van-cell title="退出登录" is-link @click="handleLogout" />
+    <!-- 系统设置 -->
+    <van-cell-group inset title="系统设置" class="mt-12">
+      <van-cell title="管理员后台" is-link to="/admin">
+        <template #right-icon>
+          <van-icon name="arrow" />
+        </template>
+      </van-cell>
+      <van-cell title="关于" value="v2.0.0" />
     </van-cell-group>
 
-    <!-- 关于 -->
-    <van-cell-group inset title="关于">
-      <van-cell title="版本" value="1.0.0" />
-      <van-cell title="作者" value="AC IoT Team" />
+    <!-- 退出登录 -->
+    <van-cell-group inset class="mt-12">
+      <van-cell title="退出登录" is-link @click="handleLogout">
+        <template #right-icon>
+          <van-icon name="arrow" />
+        </template>
+      </van-cell>
     </van-cell-group>
-
-    <!-- 智能配置向导 -->
-    <SmartSetupWizard 
-      v-if="currentSetupDevice"
-      v-model="showSetupWizard"
-      :device-id="currentSetupDevice.id"
-      :user-id="authStore.user?.id || 0"
-      @completed="onSetupCompleted"
-    />
-
-    <!-- 添加设备弹出层 -->
-    <van-popup v-model:show="showAddDevice" position="bottom" :style="{ height: '50%' }">
-      <div class="add-device-form">
-        <h3>添加设备</h3>
-        <van-form @submit="onAddDevice">
-          <van-cell-group inset>
-            <van-field
-              v-model="newDevice.uuid"
-              label="设备UUID"
-              placeholder="ESP_XXXXXXXXXXXX"
-              :rules="[{ required: true, message: '请输入设备UUID' }]"
-            />
-            <van-field
-              v-model="newDevice.name"
-              label="设备名称"
-              placeholder="例如：客厅空调"
-              :rules="[{ required: true, message: '请输入设备名称' }]"
-            />
-          </van-cell-group>
-
-          <div class="form-buttons">
-            <van-button block @click="showAddDevice = false">取消</van-button>
-            <van-button block type="primary" native-type="submit" :loading="adding">
-              添加
-            </van-button>
-          </div>
-        </van-form>
-
-        <van-divider>或者</van-divider>
-
-        <van-button block type="success" @click="showDiscovery = true">
-          🔍 扫描可用设备
-        </van-button>
-      </div>
-    </van-popup>
-
-    <!-- 设备发现弹出层 -->
-    <van-popup v-model:show="showDiscovery" position="bottom" :style="{ height: '60%' }">
-      <div class="discovery-panel">
-        <h3>发现设备</h3>
-        
-        <van-button type="primary" size="small" @click="refreshDiscovery" :loading="discovering">
-          🔄 刷新
-        </van-button>
-
-        <van-empty v-if="discoveredDevices.length === 0" description="未发现可用设备">
-          <van-button type="primary" @click="refreshDiscovery">刷新列表</van-button>
-        </van-empty>
-
-        <van-cell-group v-else inset>
-          <van-cell
-            v-for="device in discoveredDevices"
-            :key="device.uuid"
-            :title="device.uuid"
-            :label="`IP: ${device.ip} | MAC: ${device.mac}`"
-          >
-            <template #right-icon>
-              <van-button size="small" type="primary" @click="addDiscoveredDevice(device)">
-                添加
-              </van-button>
-            </template>
-          </van-cell>
-        </van-cell-group>
-      </div>
-    </van-popup>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast, showConfirmDialog, SwipeCell as VanSwipeCell } from 'vant' // Import SwipeCell locally
 import { useAuthStore } from '@/stores/auth'
-import { useDevicesStore } from '@/stores/devices'
-import { devicesApi } from '@/api/devices'
-import type { DiscoveredDevice, Device } from '@/types/device'
-import SmartSetupWizard from '@/components/SmartSetupWizard.vue'
+import { showConfirmDialog } from 'vant'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const devicesStore = useDevicesStore()
-
-const devices = computed(() => devicesStore.devices)
-const showAddDevice = ref(false)
-const showDiscovery = ref(false)
-const adding = ref(false)
-const discovering = ref(false)
-const discoveredDevices = ref<DiscoveredDevice[]>([])
-
-const showSetupWizard = ref(false)
-const currentSetupDevice = ref<Device | null>(null)
-
-const newDevice = ref({
-  uuid: '',
-  name: '',
-})
-
-const viewDevice = (id: number) => {
-  const device = devices.value.find(d => d.id === id)
-  if (device) {
-    devicesStore.setCurrentDevice(device)
-    router.push('/control')
-  }
-}
-
-const openSetup = (device: Device) => {
-  currentSetupDevice.value = device
-  showSetupWizard.value = true
-}
-
-const onSetupCompleted = () => {
-  showToast('设置已更新')
-  // Optional: refresh device config
-}
-
-const confirmDelete = async (device: Device) => {
-    try {
-        await showConfirmDialog({
-            title: '确认删除',
-            message: `确定要删除设备 "${device.name}" 吗？删除后设备将重置。`
-        });
-        await devicesApi.delete(device.id);
-        showToast('设备已删除');
-        await devicesStore.fetchDevices();
-    } catch {
-        // Cancel
-    }
-}
 
 const handleLogout = async () => {
   try {
     await showConfirmDialog({ message: '确认退出登录？' })
     authStore.logout()
     router.push('/login')
-  } catch  {
+  } catch {
     // 用户取消
   }
 }
-
-const onAddDevice = async () => {
-    // ... same as before
-    adding.value = true
-    try {
-        const device = await devicesApi.create(newDevice.value)
-        if (device) {
-            devicesStore.addDevice(device)
-            showToast('添加成功')
-            showAddDevice.value = false
-            newDevice.value = { uuid: '', name: '' }
-        }
-    } catch (error: any) {
-        showToast(error.message || '添加失败')
-    } finally {
-        adding.value = false
-    }
-}
-
-// ... rest of the functions (refreshDiscovery, addDiscoveredDevice) remain the same
-
-const refreshDiscovery = async () => {
-  discovering.value = true
-  try {
-    const result = await devicesApi.getDiscoveredDevices()
-    const devices = (result && Array.isArray(result.devices)) ? result.devices : []
-    discoveredDevices.value = devices
-    
-    if (devices.length === 0) {
-      showToast('未发现可用设备')
-    } else {
-      showToast(`发现 ${devices.length} 个设备`)
-    }
-  } catch (error) {
-    discoveredDevices.value = []
-    showToast('扫描失败')
-  } finally {
-    discovering.value = false
-  }
-}
-
-const addDiscoveredDevice = async (device: DiscoveredDevice) => {
-  const name = prompt('请输入设备名称', '客厅空调')
-  if (!name) return
-
-  adding.value = true
-  try {
-    const newDev = await devicesApi.create({ 
-      uuid: device.uuid, 
-      name,
-      mac: device.mac,
-      ip: device.ip
-    })
-    if (newDev) {
-      devicesStore.addDevice(newDev)
-      showToast('添加成功')
-      showDiscovery.value = false
-      await devicesStore.fetchDevices()
-    }
-  } catch (error: any) {
-    showToast(error.message || '添加失败')
-  } finally {
-    adding.value = false
-  }
-}
-
-onMounted(() => {
-  devicesStore.fetchDevices()
-})
 </script>
 
 <style scoped>
 .settings-page {
   padding-bottom: 20px;
-}
-
-.add-device-form,
-.discovery-panel {
-  padding: 16px;
-}
-
-.add-device-form h3,
-.discovery-panel h3 {
-  margin-bottom: 16px;
-  text-align: center;
-}
-
-.form-buttons {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.discovery-panel .van-button {
-  margin-bottom: 16px;
-}
-
-/* Fix SwipeCell button height */
-.van-swipe-cell__right .van-button {
-  height: 100%;
 }
 </style>

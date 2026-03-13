@@ -1,68 +1,46 @@
 import apiClient from './client'
-import type { Device, DeviceState, DeviceConfig, DiscoveredDevice, Brand } from '@/types/device'
+import type { CreateDeviceDto, Device, DiscoveredDevice, DisplayConfig, CommandPayload } from '@/types/device'
 
 export const devicesApi = {
-    // 获取所有设备
-    getAll: () => apiClient.get<Device[]>('/devices'),
-
-    // 获取单个设备
-    getById: (id: number) => apiClient.get<Device>(`/devices/${id}`),
-
-    // 添加设备
-    create: (data: { uuid: string; name: string }) =>
-        apiClient.post<Device>('/devices', data),
-
-    // 删除设备
-    delete: (id: number) => apiClient.delete(`/devices/${id}`),
-
-    // 发送控制命令
-    sendCommand: (id: number, command: Partial<DeviceState>) =>
-        apiClient.post(`/devices/${id}/cmd`, command),
-
-    // 获取设备配置
-    getConfig: (id: number) => apiClient.get<DeviceConfig>(`/devices/${id}/config`),
-
-    // 更新设备配置
-    updateConfig: (id: number, config: Partial<DeviceConfig>) =>
-        apiClient.patch(`/devices/${id}/config`, config),
-
-    // 设备发现
-    getDiscoveredDevices: (maxAge?: number) =>
-        apiClient.get<{ devices: DiscoveredDevice[]; count: number }>(
-            `/devices/discovery/available${maxAge ? `?maxAge=${maxAge}` : ''}`
-        ),
-
-    // 获取品牌列表
-    getBrands: () => apiClient.get<{ brands: Brand[] }>('/devices/brands'),
-
-    // 设置品牌
-    setBrand: (id: number, brandId: string, model: number) =>
-        apiClient.post(`/devices/${id}/setup/brand`, { brandId, model }),
-
-    // 自动检测
-    startAutoDetect: (id: number) =>
-        apiClient.post(`/devices/${id}/auto-detect/start`),
-
-    stopAutoDetect: (id: number) =>
-        apiClient.post(`/devices/${id}/auto-detect/stop`),
-
-    getAutoDetectStatus: (id: number) =>
-        apiClient.get(`/devices/${id}/auto-detect/status`),
-
-    // 获取动态品牌列表 (Setup)
-    getSetupBrands: (id: number) =>
-        apiClient.get<{ status: 'ready' | 'loading'; brands: string[] | any[] }>(
-            `/devices/${id}/setup/brands`
-        ),
-
-    // 批量保存场景
-    saveScenes: (id: number, scenes: any[]) =>
-        apiClient.post(`/devices/${id}/setup/save-scenes`, { scenes }),
-
-    // 开始学习
-    startLearning: (id: number, key: string) => apiClient.post(`/devices/${id}/learn/start`, { key }),
-
-    // 获取学习结果 (Polling)
-    getLearningResult: (id: number) =>
-        apiClient.get(`/devices/${id}/setup/learn-result`),
+    getAll: async (): Promise<Device[]> => {
+        const response = await apiClient.get('/devices')
+        return response.data
+    },
+    
+    getById: async (id: number): Promise<Device> => {
+        const response = await apiClient.get(`/devices/${id}`)
+        return response.data
+    },
+    
+    create: async (device: CreateDeviceDto): Promise<Device> => {
+        const response = await apiClient.post('/devices', device)
+        return response.data
+    },
+    
+    delete: async (id: number) => {
+        await apiClient.delete(`/devices/${id}`)
+    },
+    
+    getDiscoveredDevices: async (): Promise<{ devices: DiscoveredDevice[] }> => {
+        const response = await apiClient.get('/devices/discover')
+        return response.data
+    },
+    
+    // 获取显示配置
+    getDisplayConfig: async (id: number): Promise<DisplayConfig> => {
+        const response = await apiClient.get(`/devices/${id}/display-config`)
+        return response.data
+    },
+    
+    // 更新显示配置
+    updateDisplayConfig: async (id: number, config: DisplayConfig): Promise<DisplayConfig> => {
+        const response = await apiClient.patch(`/devices/${id}/display-config`, config)
+        return response.data
+    },
+    
+    // 发送命令
+    sendCommand: async (id: number, command: CommandPayload): Promise<any> => {
+        const response = await apiClient.post(`/devices/${id}/cmd`, command)
+        return response.data
+    },
 }

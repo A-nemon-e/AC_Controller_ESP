@@ -7,12 +7,9 @@ import { Routine } from './routine.entity';
 import { DevicesModule } from '../devices/devices.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Routine]),
-        DevicesModule,
-    ],
-    controllers: [RoutinesController, SchedulesController],
-    providers: [RoutinesService],
-    exports: [RoutinesService],
+  imports: [TypeOrmModule.forFeature([Routine]), DevicesModule],
+  controllers: [RoutinesController, SchedulesController],
+  providers: [RoutinesService],
+  exports: [RoutinesService],
 })
-export class RoutinesModule { }
+export class RoutinesModule {}

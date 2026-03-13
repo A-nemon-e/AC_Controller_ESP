@@ -13,7 +13,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include "../IS31FL3733/src/is31fl3733.hpp"
+#include <IS31FL3733.h>
 
 // 屏幕尺寸定义
 #define SCREEN_ROWS 11

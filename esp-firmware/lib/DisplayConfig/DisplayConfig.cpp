@@ -1,8 +1,19 @@
 /**
- * DisplayConfig - 显示配置管理实现
+ * DisplayConfig - 显示配置管理实现 (ArduinoJson优化版)
+ * 
+ * 集成ArduinoJson v6.x库进行JSON解析和生成
+ * 优势：
+ * - 更强大的JSON解析能力
+ * - 更好的错误处理
+ * - 支持嵌套对象和数组
+ * - 类型安全
+ * 
+ * @author AI Assistant
+ * @version 1.1.0
  */
 
 #include "DisplayConfig.h"
+#include <ArduinoJson.h>
 
 // 静态成员初始化
 DisplaySettings DisplayConfig::settings;
@@ -48,8 +59,8 @@ void DisplayConfig::setSwitchInterval(uint16_t seconds) {
     markDirty();
 }
 
-void DisplayConfig::setTransitionType(TransitionType type) {
-    settings.transitionType = static_cast<uint8_t>(type);
+void DisplayConfig::setTransitionType(uint8_t type) {
+    settings.transitionType = type;
     markDirty();
 }
 
@@ -71,64 +82,112 @@ void DisplayConfig::flush() {
     }
 }
 
+/**
+ * ArduinoJson优化的JSON解析
+ * 支持更复杂的JSON结构和类型检查
+ */
 bool DisplayConfig::updateFromJSON(const char* json) {
-    // 简易JSON解析（不使用ArduinoJson库，减少依赖）
-    // 格式示例: {"brightness":128,"autoSwitch":true,"switchInterval":30}
+    StaticJsonDocument<512> doc;  // 512字节静态缓冲区，避免堆分配
     
-    char* ptr = strstr(json, "\"brightness\"");
-    if (ptr) {
-        ptr = strchr(ptr, ':');
-        if (ptr) {
-            int val = atoi(ptr + 1);
-            if (val >= 0 && val <= 255) {
-                settings.brightness = (uint8_t)val;
-            }
+    // 解析JSON
+    DeserializationError error = deserializeJson(doc, json);
+    
+    if (error) {
+        Serial.print(F("[DisplayConfig] JSON parse error: "));
+        Serial.println(error.c_str());
+        return false;
+    }
+    
+    bool hasChanges = false;
+    
+    // 解析亮度 (类型检查)
+    if (doc.containsKey("brightness")) {
+        int val = doc["brightness"].as<int>();
+        if (val >= 0 && val <= 255) {
+            settings.brightness = static_cast<uint8_t>(val);
+            hasChanges = true;
+        } else {
+            Serial.println(F("[DisplayConfig] Warning: brightness out of range"));
         }
     }
     
-    ptr = strstr(json, "\"autoSwitch\"");
-    if (ptr) {
-        ptr = strchr(ptr, ':');
-        if (ptr) {
-            settings.autoSwitch = (strstr(ptr, "true") != nullptr);
+    // 解析自动切换
+    if (doc.containsKey("autoSwitch")) {
+        settings.autoSwitch = doc["autoSwitch"].as<bool>();
+        hasChanges = true;
+    }
+    
+    // 解析切换间隔
+    if (doc.containsKey("switchInterval")) {
+        int val = doc["switchInterval"].as<int>();
+        if (val > 0 && val < 3600) {
+            settings.switchInterval = static_cast<uint16_t>(val);
+            hasChanges = true;
+        } else {
+            Serial.println(F("[DisplayConfig] Warning: switchInterval out of range"));
         }
     }
     
-    ptr = strstr(json, "\"switchInterval\"");
-    if (ptr) {
-        ptr = strchr(ptr, ':');
-        if (ptr) {
-            int val = atoi(ptr + 1);
-            if (val > 0 && val < 3600) {
-                settings.switchInterval = (uint16_t)val;
-            }
+    // 解析转场类型
+    if (doc.containsKey("transitionType")) {
+        int val = doc["transitionType"].as<int>();
+        if (val >= 0 && val <= 5) {
+            settings.transitionType = static_cast<uint8_t>(val);
+            hasChanges = true;
+        } else {
+            Serial.println(F("[DisplayConfig] Warning: transitionType out of range"));
         }
     }
     
-    ptr = strstr(json, "\"transitionType\"");
-    if (ptr) {
-        ptr = strchr(ptr, ':');
-        if (ptr) {
-            int val = atoi(ptr + 1);
-            if (val >= 0 && val <= 5) {
-                settings.transitionType = (uint8_t)val;
-            }
+    // 解析当前卡片
+    if (doc.containsKey("currentCard")) {
+        int val = doc["currentCard"].as<int>();
+        if (val >= 0 && val < 10) {  // 假设最多10个卡片
+            settings.currentCard = static_cast<uint8_t>(val);
+            hasChanges = true;
+        } else {
+            Serial.println(F("[DisplayConfig] Warning: currentCard out of range"));
         }
     }
     
-    markDirty();
+    // 如果解析成功且有变化，标记为dirty
+    if (hasChanges) {
+        markDirty();
+        Serial.println(F("[DisplayConfig] Settings updated from JSON"));
+    }
+    
     return true;
 }
 
+/**
+ * ArduinoJson优化的JSON生成
+ * 生成格式化JSON，支持扩展字段
+ */
 size_t DisplayConfig::toJSON(char* buffer, size_t bufferSize) {
-    return snprintf(buffer, bufferSize,
-        "{\"brightness\":%d,\"currentCard\":%d,\"autoSwitch\":%s,\"switchInterval\":%d,\"transitionType\":%d}",
-        settings.brightness,
-        settings.currentCard,
-        settings.autoSwitch ? "true" : "false",
-        settings.switchInterval,
-        settings.transitionType
-    );
+    StaticJsonDocument<512> doc;
+    
+    // 添加配置字段
+    doc["brightness"] = settings.brightness;
+    doc["currentCard"] = settings.currentCard;
+    doc["autoSwitch"] = settings.autoSwitch;
+    doc["switchInterval"] = settings.switchInterval;
+    doc["transitionType"] = settings.transitionType;
+    
+    // 添加元数据
+    doc["version"] = EEPROM_VERSION;
+    doc["timestamp"] = millis();
+    
+    // 序列化
+    size_t len = serializeJson(doc, buffer, bufferSize);
+    
+    if (len >= bufferSize) {
+        Serial.println(F("[DisplayConfig] Warning: JSON buffer overflow"));
+        // 缓冲区不够，返回0表示错误
+        buffer[0] = '\0';
+        return 0;
+    }
+    
+    return len;
 }
 
 void DisplayConfig::resetToDefault() {
@@ -144,7 +203,7 @@ void DisplayConfig::clearEEPROM() {
 }
 
 void DisplayConfig::printConfig() {
-    Serial.println("[DisplayConfig] Current Settings:");
+    Serial.println(F("[DisplayConfig] Current Settings:"));
     Serial.printf("  Brightness: %d\n", settings.brightness);
     Serial.printf("  CurrentCard: %d\n", settings.currentCard);
     Serial.printf("  AutoSwitch: %s\n", settings.autoSwitch ? "true" : "false");
@@ -164,7 +223,7 @@ void DisplayConfig::loadFromEEPROM() {
     EEPROM.get(EEPROM_MAGIC_ADDR, magic);
     
     if (magic != EEPROM_MAGIC) {
-        Serial.println("[DisplayConfig] No valid config found, using defaults");
+        Serial.println(F("[DisplayConfig] No valid config found, using defaults"));
         setDefaults();
         saveToEEPROM();
         return;
@@ -175,7 +234,8 @@ void DisplayConfig::loadFromEEPROM() {
     EEPROM.get(EEPROM_VERSION_ADDR, version);
     
     if (version != EEPROM_VERSION) {
-        Serial.printf("[DisplayConfig] Version mismatch (%d vs %d), using defaults\n", version, EEPROM_VERSION);
+        Serial.printf("[DisplayConfig] Version mismatch (%d vs %d), using defaults\n", 
+                      version, EEPROM_VERSION);
         setDefaults();
         saveToEEPROM();
         return;
@@ -192,7 +252,7 @@ void DisplayConfig::loadFromEEPROM() {
     uint16_t calculatedChecksum = calculateChecksum(tempSettings);
     
     if (storedChecksum != calculatedChecksum) {
-        Serial.println("[DisplayConfig] Checksum mismatch, using defaults");
+        Serial.println(F("[DisplayConfig] Checksum mismatch, using defaults"));
         setDefaults();
         saveToEEPROM();
         return;
@@ -200,14 +260,14 @@ void DisplayConfig::loadFromEEPROM() {
     
     // 验证数据有效性
     if (!validateData(tempSettings)) {
-        Serial.println("[DisplayConfig] Data validation failed, using defaults");
+        Serial.println(F("[DisplayConfig] Data validation failed, using defaults"));
         setDefaults();
         saveToEEPROM();
         return;
     }
     
     settings = tempSettings;
-    Serial.println("[DisplayConfig] Config loaded from EEPROM");
+    Serial.println(F("[DisplayConfig] Config loaded from EEPROM"));
 }
 
 void DisplayConfig::saveToEEPROM() {
@@ -229,7 +289,7 @@ void DisplayConfig::saveToEEPROM() {
     // 提交写入
     EEPROM.commit();
     
-    Serial.println("[DisplayConfig] Config saved to EEPROM");
+    Serial.println(F("[DisplayConfig] Config saved to EEPROM"));
 }
 
 uint16_t DisplayConfig::calculateChecksum(const DisplaySettings& data) {
@@ -260,5 +320,5 @@ bool DisplayConfig::validateData(const DisplaySettings& data) {
 
 void DisplayConfig::setDefaults() {
     settings = DisplaySettings();  // 使用构造函数默认值
-    Serial.println("[DisplayConfig] Default settings applied");
+    Serial.println(F("[DisplayConfig] Default settings applied"));
 }

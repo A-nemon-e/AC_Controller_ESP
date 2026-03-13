@@ -1,45 +1,55 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Device } from './device.entity';
 import { User } from '../users/user.entity';
 
 export enum AuditAction {
-    CMD_API = 'CMD_API',       // App/API Control
-    CMD_CRON = 'CMD_CRON',     // Scheduled Routine
-    SYNC_IR = 'SYNC_IR',       // IR Remote Sync
-    EVENT_GHOST = 'EVENT_GHOST', // Ghost Operation
-    LEARN = 'LEARN',           // IR Learning
-    IR_UNKNOWN = 'IR_UNKNOWN', // ✅ Unknown IR Signal
+  CMD_API = 'CMD_API', // App/API Control
+  CMD_CRON = 'CMD_CRON', // Scheduled Routine
+  SYNC_IR = 'SYNC_IR', // IR Remote Sync
+  EVENT_GHOST = 'EVENT_GHOST', // Ghost Operation
+  LEARN = 'LEARN', // IR Learning
+  IR_UNKNOWN = 'IR_UNKNOWN', // ✅ Unknown IR Signal
 }
 
 @Entity()
 export class AuditLog {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column({
-        type: 'simple-enum',
-        enum: AuditAction,
-    })
-    action: AuditAction;
+  @Column({
+    type: 'simple-enum',
+    enum: AuditAction,
+  })
+  action: AuditAction;
 
-    @Column('simple-json', { nullable: true })
-    details: any;
+  @Column('simple-json', { nullable: true })
+  details: any;
 
-    @CreateDateColumn()
-    timestamp: Date;
+  @CreateDateColumn()
+  timestamp: Date;
 
-    @ManyToOne(() => Device, (device) => device.id, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'deviceId' })
-    device: Device;
+  @ManyToOne(() => Device, (device) => device.id, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'deviceId' })
+  device: Device;
 
-    @Column()
-    deviceId: number;
+  @Column()
+  deviceId: number;
 
-    // Optional: User who triggered the action (nullable for system events)
-    @ManyToOne(() => User, (user) => user.id, { nullable: true, onDelete: 'SET NULL' })
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  // Optional: User who triggered the action (nullable for system events)
+  @ManyToOne(() => User, (user) => user.id, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column({ nullable: true })
-    userId: number;
+  @Column({ nullable: true })
+  userId: number;
 }

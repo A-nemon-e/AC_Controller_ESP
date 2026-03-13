@@ -13,11 +13,6 @@
 
 #include <Arduino.h>
 #include "../LEDMatrix/LEDMatrix.h"
-#include "Fonts/Font_3x5.h"
-#include "Fonts/Font_5x7.h"
-#include "Fonts/Font_3x9.h"
-#include "Fonts/Font_5x5.h"
-#include "Fonts/Font_6x9.h"
 
 // 字体类型枚举
 enum class FontType {
@@ -40,14 +35,6 @@ enum class TextPosition {
     BOTTOM_CENTER,  // 下中
     BOTTOM_RIGHT    // 右下
 };
-
-// 字符索引常量
-#define CHAR_INDEX_DIGIT_0  0
-#define CHAR_INDEX_DIGIT_9  9
-#define CHAR_INDEX_LETTER_A 10
-#define CHAR_INDEX_LETTER_Z 35
-#define CHAR_INDEX_COLON    36
-#define CHAR_INDEX_SPACE    37
 
 class FontRenderer {
 public:
@@ -140,6 +127,11 @@ public:
     static void drawColon(uint8_t x, uint8_t y, FontType font, uint8_t brightness = 255);
     
     /**
+     * @brief 渲染冒号数据
+     */
+    static void drawColonData(uint8_t x, uint8_t y, const uint8_t* data, uint8_t w, uint8_t h, uint8_t brightness);
+    
+    /**
      * @brief 渲染图标
      * @param iconData 图标数据指针
      * @param x X坐标
@@ -165,151 +157,12 @@ public:
      * @return true支持，false不支持
      */
     static bool isCharSupported(char c);
-    
-    // 字体数据访问函数
+
+private:
+    // 获取字体数据指针
     static const uint8_t* getFontData(FontType font);
     static uint8_t getFontDataWidth(FontType font);
     static uint8_t getFontDataHeight(FontType font);
-
-private:
-    // ==================== 模板渲染函数（内联实现） ====================
-    
-    // 通用字体渲染模板
-    template<uint8_t WIDTH, uint8_t HEIGHT, uint8_t COUNT>
-    static uint8_t drawCharTemplate(
-        char c, 
-        uint8_t x, 
-        uint8_t y, 
-        uint8_t brightness,
-        const uint8_t fontData[COUNT][HEIGHT]
-    ) {
-        int8_t idx = getCharIndex(c);
-        if (idx < 0 || idx >= (int8_t)COUNT) return WIDTH;
-        
-        for (uint8_t row = 0; row < HEIGHT; row++) {
-            uint8_t rowData = pgm_read_byte(&fontData[idx][row]);
-            for (uint8_t col = 0; col < WIDTH; col++) {
-                if (rowData & (1 << (WIDTH - 1 - col))) {
-                    LEDMatrix::setPixelClipped(x + col, y + row, brightness);
-                }
-            }
-        }
-        return WIDTH;
-    }
-    
-    // 6x9字体专用渲染（仅支持数字）
-    static uint8_t drawChar6x9(char c, uint8_t x, uint8_t y, uint8_t brightness) {
-        int8_t idx = getCharIndex(c);
-        // 6x9只支持数字0-9
-        if (idx < 0 || idx > 9) return 6;
-        
-        for (uint8_t row = 0; row < 9; row++) {
-            uint8_t rowData = pgm_read_byte(&Font6x9[idx][row]);
-            for (uint8_t col = 0; col < 6; col++) {
-                if (rowData & (1 << (5 - col))) {
-                    LEDMatrix::setPixelClipped(x + col, y + row, brightness);
-                }
-            }
-        }
-        return 6;
-    }
-    
-    // 冒号渲染模板
-    template<uint8_t W, uint8_t H>
-    static void drawColonTemplate(uint8_t x, uint8_t y, const uint8_t colonData[H], uint8_t brightness) {
-        for (uint8_t row = 0; row < H; row++) {
-            uint8_t rowData = pgm_read_byte(&colonData[row]);
-            for (uint8_t col = 0; col < W; col++) {
-                if (rowData & (1 << (W - 1 - col))) {
-                    LEDMatrix::setPixelClipped(x + col, y + row, brightness);
-                }
-            }
-        }
-    }
 };
-
-// ==================== 内联函数实现 ====================
-
-inline uint8_t FontRenderer::drawChar(char c, uint8_t x, uint8_t y, FontType font, uint8_t brightness) {
-    // 转换为大写
-    if (c >= 'a' && c <= 'z') {
-        c = c - 'a' + 'A';
-    }
-    
-    switch (font) {
-        case FontType::FONT_3x5:
-            return drawCharTemplate<3, 5, FONT_3X5_COUNT>(c, x, y, brightness, Font3x5);
-        case FontType::FONT_5x7:
-            return drawCharTemplate<5, 7, FONT_5X7_COUNT>(c, x, y, brightness, Font5x7);
-        case FontType::FONT_3x9:
-            return drawCharTemplate<3, 9, FONT_3X9_COUNT>(c, x, y, brightness, Font3x9);
-        case FontType::FONT_5x5:
-            return drawCharTemplate<5, 5, FONT_5X5_COUNT>(c, x, y, brightness, Font5x5);
-        case FontType::FONT_6x9:
-            return drawChar6x9(c, x, y, brightness);
-        default:
-            return 0;
-    }
-}
-
-inline void FontRenderer::drawColon(uint8_t x, uint8_t y, FontType font, uint8_t brightness) {
-    switch (font) {
-        case FontType::FONT_3x5:
-            drawColonTemplate<3, 5>(x, y, Font3x5_Colon, brightness);
-            break;
-        case FontType::FONT_5x7:
-            drawColonTemplate<5, 7>(x, y, Font5x7_Colon, brightness);
-            break;
-        case FontType::FONT_3x9:
-            drawColonTemplate<3, 9>(x, y, Font3x9_Colon, brightness);
-            break;
-        case FontType::FONT_5x5:
-            drawColonTemplate<5, 5>(x, y, Font5x5_Colon, brightness);
-            break;
-        case FontType::FONT_6x9:
-            drawColonTemplate<6, 9>(x, y, Font6x9_Colon, brightness);
-            break;
-    }
-}
-
-inline void FontRenderer::drawIcon(const uint8_t* iconData, uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t brightness) {
-    for (uint8_t row = 0; row < h; row++) {
-        uint8_t rowData = pgm_read_byte(&iconData[row]);
-        for (uint8_t col = 0; col < w; col++) {
-            if (rowData & (1 << (w - 1 - col))) {
-                LEDMatrix::setPixelClipped(x + col, y + row, brightness);
-            }
-        }
-    }
-}
-
-inline int8_t FontRenderer::getCharIndex(char c) {
-    // 数字 0-9
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    }
-    
-    // 字母 A-Z
-    if (c >= 'A' && c <= 'Z') {
-        return 10 + (c - 'A');
-    }
-    
-    // 冒号
-    if (c == ':') {
-        return CHAR_INDEX_COLON;
-    }
-    
-    // 空格
-    if (c == ' ') {
-        return CHAR_INDEX_SPACE;
-    }
-    
-    // 不支持
-    return -1;
-}
-
-inline bool FontRenderer::isCharSupported(char c) {
-    return getCharIndex(c) >= 0;
-}
 
 #endif // FONT_RENDERER_H

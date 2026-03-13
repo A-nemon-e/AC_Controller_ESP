@@ -1,8 +1,23 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, UseGuards, Request, ParseIntPipe, Query, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Patch,
+  UseGuards,
+  Request,
+  ParseIntPipe,
+  Query,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { AcCommandDto } from './dto/command.dto';
 import { UpdateDeviceConfigDto } from './dto/update-device-config.dto';
+import { UpdateDisplayConfigDto } from './dto/update-display-config.dto';
 import { SetupBrandDto, SetupLearnAllDto } from './dto/setup.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LearnService } from './learn.service';
@@ -11,264 +26,309 @@ import { DeviceDiscoveryService } from './device-discovery.service';
 @UseGuards(JwtAuthGuard)
 @Controller('devices')
 export class DevicesController {
-    constructor(
-        private readonly devicesService: DevicesService,
-        private readonly learnService: LearnService,
-        private readonly deviceDiscoveryService: DeviceDiscoveryService,
-    ) { }
+  constructor(
+    private readonly devicesService: DevicesService,
+    private readonly learnService: LearnService,
+    private readonly deviceDiscoveryService: DeviceDiscoveryService,
+  ) {}
 
-    @Post()
-    create(@Request() req: any, @Body() createDeviceDto: CreateDeviceDto) {
-        return this.devicesService.create(req.user.userId, createDeviceDto);
+  @Post()
+  create(@Request() req: any, @Body() createDeviceDto: CreateDeviceDto) {
+    return this.devicesService.create(req.user.userId, createDeviceDto);
+  }
+
+  @Get()
+  findAll(@Request() req: any) {
+    return this.devicesService.findAll(req.user.userId);
+  }
+
+  // ===== 设备发现 API (静态路由优先) =====
+
+  /**
+   * 获取所有可发现的未绑定设备
+   */
+  @Get('discovery/available')
+  async getAvailableDevices(@Query('maxAge') maxAge?: string) {
+    console.log('[Controller] 收到 discovery/available 请求'); // 直接 console.log 确保能看到
+    const maxAgeMinutes = maxAge ? parseInt(maxAge) : 5;
+    return {
+      devices: this.deviceDiscoveryService.getAvailableDevices(maxAgeMinutes),
+      count: this.deviceDiscoveryService.getDiscoveredDeviceCount(),
+    };
+  }
+
+  @Get(':id')
+  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.devicesService.findOne(req.user.userId, id);
+  }
+
+  @Delete(':id')
+  remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.devicesService.remove(req.user.userId, id);
+  }
+
+  @Post(':id/cmd')
+  sendCommand(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() commandDto: AcCommandDto,
+  ) {
+    return this.devicesService.sendCommand(req.user.userId, id, commandDto);
+  }
+
+  @Get(':id/logs')
+  getLogs(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('action') action?: string,
+    @Query('limit') limit?: string,
+    @Query('since') since?: string,
+  ) {
+    return this.devicesService.getLogs(
+      req.user.userId,
+      id,
+      limit ? parseInt(limit) : 50,
+      action,
+      since ? new Date(since) : undefined,
+    );
+  }
+
+  @Get(':id/readings')
+  getReadings(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.devicesService.getReadings(req.user.userId, id);
+  }
+
+  @Get(':id/config')
+  getConfig(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.devicesService.getConfig(req.user.userId, id);
+  }
+
+  @Patch(':id/config')
+  updateConfig(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDeviceConfigDto,
+  ) {
+    return this.devicesService.updateConfig(req.user.userId, id, dto);
+  }
+
+  // ===== 显示配置 API =====
+
+  /**
+   * 获取设备显示配置
+   */
+  @Get(':id/display-config')
+  async getDisplayConfig(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.devicesService.getDisplayConfig(req.user.userId, id);
+  }
+
+  /**
+   * 更新设备显示配置
+   */
+  @Patch(':id/display-config')
+  async updateDisplayConfig(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDisplayConfigDto,
+  ) {
+    return this.devicesService.updateDisplayConfig(req.user.userId, id, dto);
+  }
+
+  // ===== 红外学习 =====
+
+  @Post(':id/learn/start')
+  async startLearning(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { key: string },
+  ) {
+    const device = await this.devicesService.findOneById(id);
+    if (!device) throw new NotFoundException('Device not found');
+    if (device.userId !== req.user.userId)
+      throw new ForbiddenException('Access denied');
+
+    return this.learnService.startLearning(
+      req.user.userId,
+      device.uuid,
+      body.key,
+    );
+  }
+
+  @Get(':id/learn/status')
+  async getLearningStatus(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const device = await this.devicesService.findOneById(id);
+    if (!device) throw new NotFoundException('Device not found');
+    if (device.userId !== req.user.userId)
+      throw new ForbiddenException('Access denied');
+
+    return this.learnService.getStatus(device.uuid);
+  }
+
+  @Delete(':id/learn/:key')
+  async deleteLearnedCode(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('key') key: string,
+  ) {
+    const device = await this.devicesService.findOneById(id);
+    if (!device) throw new NotFoundException('Device not found');
+    if (device.userId !== req.user.userId)
+      throw new ForbiddenException('Access denied');
+
+    if (device.irConfig && device.irConfig[key]) {
+      delete device.irConfig[key];
+      await this.devicesService.updateConfig(req.user.userId, id, {
+        irConfig: device.irConfig,
+      });
     }
 
-    @Get()
-    findAll(@Request() req: any) {
-        return this.devicesService.findAll(req.user.userId);
+    return { message: 'Deleted' };
+  }
+
+  // ===== 设备初始化向导 =====
+
+  @Get(':id/setup/status')
+  getSetupStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.devicesService.getSetupStatus(req.user.userId, id);
+  }
+
+  @Post(':id/setup/brand')
+  setBrand(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetupBrandDto,
+  ) {
+    return this.devicesService.setBrand(
+      req.user.userId,
+      id,
+      dto.brandId,
+      dto.model,
+    );
+  }
+
+  @Post(':id/setup/learn-all')
+  startLearnAll(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetupLearnAllDto,
+  ) {
+    return this.devicesService.startLearnAll(req.user.userId, id, dto.keys);
+  }
+
+  @Get(':id/setup/learn-result')
+  async getLearningResult(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.devicesService.getLearningResult(id); // 服务层方法不需要userId，因为只是查询缓存，且learn过程本身有权限校验
+  }
+
+  @Post(':id/setup/complete')
+  completeSetup(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.devicesService.completeSetup(req.user.userId, id);
+  }
+
+  // ===== ✅ 品牌协议支持 (Dynamic Firmware Discovery) =====
+
+  @Get(':id/setup/brands')
+  async getDeviceSupportedBrands(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.devicesService.getSupportedBrands(req.user.userId, id);
+  }
+
+  @Post(':id/setup/save-scenes')
+  async saveScenes(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { scenes: any[] },
+  ) {
+    return this.devicesService.saveScenes(req.user.userId, id, body.scenes);
+  }
+
+  // (保留旧接口作为Fallback，或标记为 deprecated)
+  @Get('brands')
+  getLegacySupportedBrands() {
+    return {
+      brands: [
+        { id: 'GREE', name: '格力 (Fallback)', models: [0] },
+        // ... legacy list
+      ],
+    };
+  }
+
+  // ===== 自动协议检测 API =====
+
+  /**
+   * 启动自动协议检测
+   */
+  @Post(':id/auto-detect/start')
+  async startAutoDetect(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const device = await this.devicesService.findOneById(id);
+
+    if (!device || device.userId !== req.user.userId) {
+      throw new ForbiddenException('无权访问此设备');
     }
 
-    // ===== 设备发现 API (静态路由优先) =====
+    // 发送MQTT命令到ESP
+    return this.devicesService.startAutoDetect(req.user.userId, id);
+  }
 
-    /**
-     * 获取所有可发现的未绑定设备
-     */
-    @Get('discovery/available')
-    async getAvailableDevices(@Query('maxAge') maxAge?: string) {
-        console.log('[Controller] 收到 discovery/available 请求'); // 直接 console.log 确保能看到
-        const maxAgeMinutes = maxAge ? parseInt(maxAge) : 5;
-        return {
-            devices: this.deviceDiscoveryService.getAvailableDevices(maxAgeMinutes),
-            count: this.deviceDiscoveryService.getDiscoveredDeviceCount(),
-        };
+  /**
+   * 停止自动协议检测
+   */
+  @Post(':id/auto-detect/stop')
+  async stopAutoDetect(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const device = await this.devicesService.findOneById(id);
+
+    if (!device || device.userId !== req.user.userId) {
+      throw new ForbiddenException('无权访问此设备');
     }
 
-    @Get(':id')
-    findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        return this.devicesService.findOne(req.user.userId, id);
+    return this.devicesService.stopAutoDetect(req.user.userId, id);
+  }
+
+  /**
+   * 获取自动检测状态
+   */
+  @Get(':id/auto-detect/status')
+  async getAutoDetectStatus(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const device = await this.devicesService.findOneById(id);
+
+    if (!device || device.userId !== req.user.userId) {
+      throw new ForbiddenException('无权访问此设备');
     }
 
-    @Delete(':id')
-    remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        return this.devicesService.remove(req.user.userId, id);
-    }
+    return this.devicesService.getAutoDetectStatus(id);
+  }
 
-    @Post(':id/cmd')
-    sendCommand(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Body() commandDto: AcCommandDto,
-    ) {
-        return this.devicesService.sendCommand(req.user.userId, id, commandDto);
-    }
+  // ===== 设备发现 API =====
 
-    @Get(':id/logs')
-    getLogs(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Query('action') action?: string,
-        @Query('limit') limit?: string,
-        @Query('since') since?: string,
-    ) {
-        return this.devicesService.getLogs(
-            req.user.userId,
-            id,
-            limit ? parseInt(limit) : 50,
-            action,
-            since ? new Date(since) : undefined,
-        );
-    }
-
-    @Get(':id/readings')
-    getReadings(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-    ) {
-        return this.devicesService.getReadings(req.user.userId, id);
-    }
-
-    @Get(':id/config')
-    getConfig(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        return this.devicesService.getConfig(req.user.userId, id);
-    }
-
-    @Patch(':id/config')
-    updateConfig(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Body() dto: UpdateDeviceConfigDto,
-    ) {
-        return this.devicesService.updateConfig(req.user.userId, id, dto);
-    }
-
-    // ===== 红外学习 =====
-
-    @Post(':id/learn/start')
-    async startLearning(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Body() body: { key: string },
-    ) {
-        const device = await this.devicesService.findOneById(id);
-        if (!device) throw new NotFoundException('Device not found');
-        if (device.userId !== req.user.userId) throw new ForbiddenException('Access denied');
-
-        return this.learnService.startLearning(req.user.userId, device.uuid, body.key);
-    }
-
-    @Get(':id/learn/status')
-    async getLearningStatus(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-    ) {
-        const device = await this.devicesService.findOneById(id);
-        if (!device) throw new NotFoundException('Device not found');
-        if (device.userId !== req.user.userId) throw new ForbiddenException('Access denied');
-
-        return this.learnService.getStatus(device.uuid);
-    }
-
-    @Delete(':id/learn/:key')
-    async deleteLearnedCode(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Param('key') key: string,
-    ) {
-        const device = await this.devicesService.findOneById(id);
-        if (!device) throw new NotFoundException('Device not found');
-        if (device.userId !== req.user.userId) throw new ForbiddenException('Access denied');
-
-        if (device.irConfig && device.irConfig[key]) {
-            delete device.irConfig[key];
-            await this.devicesService.updateConfig(req.user.userId, id, { irConfig: device.irConfig });
-        }
-
-        return { message: 'Deleted' };
-    }
-
-    // ===== 设备初始化向导 =====
-
-    @Get(':id/setup/status')
-    getSetupStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        return this.devicesService.getSetupStatus(req.user.userId, id);
-    }
-
-    @Post(':id/setup/brand')
-    setBrand(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Body() dto: SetupBrandDto,
-    ) {
-        return this.devicesService.setBrand(req.user.userId, id, dto.brandId, dto.model);
-    }
-
-    @Post(':id/setup/learn-all')
-    startLearnAll(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Body() dto: SetupLearnAllDto,
-    ) {
-        return this.devicesService.startLearnAll(req.user.userId, id, dto.keys);
-    }
-
-    @Get(':id/setup/learn-result')
-    async getLearningResult(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number
-    ) {
-        return this.devicesService.getLearningResult(id); // 服务层方法不需要userId，因为只是查询缓存，且learn过程本身有权限校验
-    }
-
-    @Post(':id/setup/complete')
-    completeSetup(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        return this.devicesService.completeSetup(req.user.userId, id);
-    }
-
-    // ===== ✅ 品牌协议支持 (Dynamic Firmware Discovery) =====
-
-    @Get(':id/setup/brands')
-    async getDeviceSupportedBrands(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number
-    ) {
-        return this.devicesService.getSupportedBrands(req.user.userId, id);
-    }
-
-    @Post(':id/setup/save-scenes')
-    async saveScenes(
-        @Request() req: any,
-        @Param('id', ParseIntPipe) id: number,
-        @Body() body: { scenes: any[] }
-    ) {
-        return this.devicesService.saveScenes(req.user.userId, id, body.scenes);
-    }
-
-    // (保留旧接口作为Fallback，或标记为 deprecated)
-    @Get('brands')
-    getLegacySupportedBrands() {
-        return {
-            brands: [
-                { id: 'GREE', name: '格力 (Fallback)', models: [0] },
-                // ... legacy list
-            ]
-        };
-    }
-
-    // ===== 自动协议检测 API =====
-
-    /**
-     * 启动自动协议检测
-     */
-    @Post(':id/auto-detect/start')
-    async startAutoDetect(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        const device = await this.devicesService.findOneById(id);
-
-        if (!device || device.userId !== req.user.userId) {
-            throw new ForbiddenException('无权访问此设备');
-        }
-
-        // 发送MQTT命令到ESP
-        return this.devicesService.startAutoDetect(req.user.userId, id);
-    }
-
-    /**
-     * 停止自动协议检测
-     */
-    @Post(':id/auto-detect/stop')
-    async stopAutoDetect(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        const device = await this.devicesService.findOneById(id);
-
-        if (!device || device.userId !== req.user.userId) {
-            throw new ForbiddenException('无权访问此设备');
-        }
-
-        return this.devicesService.stopAutoDetect(req.user.userId, id);
-    }
-
-    /**
-     * 获取自动检测状态
-     */
-    @Get(':id/auto-detect/status')
-    async getAutoDetectStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-        const device = await this.devicesService.findOneById(id);
-
-        if (!device || device.userId !== req.user.userId) {
-            throw new ForbiddenException('无权访问此设备');
-        }
-
-        return this.devicesService.getAutoDetectStatus(id);
-    }
-
-    // ===== 设备发现 API =====
-
-    /**
-     * 手动清理离线设备
-     */
-    @Post('discovery/cleanup')
-    cleanupOfflineDevices() {
-        const count = this.deviceDiscoveryService.cleanupOfflineDevices(10);
-        return {
-            message: `已清理 ${count} 个离线设备`,
-            cleanedCount: count,
-        };
-    }
+  /**
+   * 手动清理离线设备
+   */
+  @Post('discovery/cleanup')
+  cleanupOfflineDevices() {
+    const count = this.deviceDiscoveryService.cleanupOfflineDevices(10);
+    return {
+      message: `已清理 ${count} 个离线设备`,
+      cleanedCount: count,
+    };
+  }
 }

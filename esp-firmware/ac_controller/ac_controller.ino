@@ -25,18 +25,40 @@
 #include "mqtt_client.h"
 
 #include "i2c_scanner.h" // I2C设备扫描工具
-#include "led_driver.h"  // LED矩阵驱动
+// #include "led_driver.h"  // LED矩阵驱动 (已弃用，使用DisplayEngine替代)
 #include "sensors.h"
 #include "state_manager.h"
 #include "wifi_manager.h"
 #include <ArduinoJson.h> // ✅ 新增：JSON库
 #include <Wire.h>        // I2C库（用于AHT20和IS31FL3733）
 
+// ✅ 新增：EasyButton 按键处理
+#include <EasyButton.h>
+
+// ✅ 新增：LED矩阵和字体渲染（DisplayEngine依赖）
+#include <IS31FL3733.h>
+#include <LEDMatrix.h>
+#include <FontRenderer.h>
+
+// ✅ 新增：DisplayEngine显示引擎
+#include <DisplayEngine.h>
+#include <DisplayConfig.h>
+
 // ===== 全局变量定义 =====
 // 定时器配置（可通过MQTT动态修改）
 uint32_t sensorInterval = DEFAULT_SENSOR_INTERVAL;
 uint32_t heartbeatInterval = DEFAULT_HEARTBEAT_INTERVAL;
 uint32_t ghostWindow = DEFAULT_GHOST_WINDOW;
+
+// ✅ 新增：按键和显示相关全局变量
+bool screenOn = true;
+uint8_t gccValue = 159;
+int8_t brtDir = -1;
+
+// ✅ 新增：NTP同步相关变量
+bool ntpSynced = false;
+uint32_t ntpLastSyncMs = 0;
+bool wifiWasConnected = false;
 
 // ===== 函数声明 =====
 void onMQTTMessage(char *topic, uint8_t *payload, unsigned int length);
@@ -50,6 +72,21 @@ void printSystemInfo();
 void publishDeviceAnnounce();                   // ✅ 设备上线消息
 bool tryParseProtocol(decode_results *results); // ✅ 协议解析
 void publishIREvent(decode_results *results);   // ✅ 红外事件上报
+
+// ✅ 新增：EasyButton 配置和回调
+#define BTN_DEBOUNCE_MS 35
+#define BTN_LONG_MS 800
+#define BTN_DOUBLE_MS 400
+#define BTN_BRT_MS 30
+
+void setupButton();
+void processButton();
+void doShortPress();
+void doDoubleClick();
+void doLongPressStep();
+
+// ✅ 新增：DisplayEngine相关函数
+void createDefaultCards();                      // 创建默认显示卡片
 
 // ===== 初始化 =====
 void setup() {
@@ -71,30 +108,24 @@ void setup() {
   // 3. 初始化LED指示
   LEDIndicator::init();
 
-  // 3.5 初始化LED显示系统（新增 - 42×11宽屏）
+  // 3.5 初始化LED显示系统（DisplayEngine - 42×11宽屏）
   DEBUG_PRINTLN("[主程序] 初始化LED显示系统...");
 
-  // 启用IS31FL3733芯片（SDB引脚拉高）
-  pinMode(PIN_SDB, OUTPUT);
-  digitalWrite(PIN_SDB, HIGH);
-  DEBUG_PRINTLN("[主程序] ✅ SDB引脚拉高，IS31FL3733已启用");
-  delay(100); // 等待芯片稳定
+  // 3.6 初始化DisplayEngine显示引擎（内部会处理I2C和SDB初始化）
+  DisplayManager::getInstance().begin();
+  DEBUG_PRINTLN("[主程序] ✅ DisplayEngine初始化完成");
 
-  // 初始化I2C总线（400kHz快速模式，复用AHT20和IS31FL3733）
-  Wire.begin(PIN_SDA, PIN_SCL);
-  Wire.setClock(I2C_CLOCK_SPEED);
-  DEBUG_PRINTF("[主程序] ✅ I2C已初始化: SDA=%d, SCL=%d, 速度=%dkHz\n", PIN_SDA,
-               PIN_SCL, I2C_CLOCK_SPEED / 1000);
+  // 3.7 创建默认卡片（时钟卡片）
+  createDefaultCards();
+  DEBUG_PRINTLN("[主程序] ✅ 默认卡片创建完成");
 
-  // 扫描I2C总线上的所有设备
-  I2CScanner::scan();
+  // 3.8 设置初始亮度
+  LEDMatrix::setGlobalBrightness(gccValue);
+  DEBUG_PRINTLN("[主程序] ✅ 初始亮度设置完成");
 
-  // 3.6 初始化LED驱动（新增 - 步骤3）
-  LEDDriver::init();
-
-  // 测试：点亮左上角LED
-  LEDDriver::test();
-  DEBUG_PRINTLN("[主程序] ✅ LED驱动测试完成");
+  // 3.9 显示WiFi连接提示（在阻塞连接前显示）
+  DEBUG_PRINTLN("[主程序] 显示WiFi连接提示...");
+  displayWiFiConnecting();
 
   // 4. 连接WiFi
   WiFiManager::connect();
@@ -105,6 +136,11 @@ void setup() {
     WiFiManager::maintain();
     LEDIndicator::update();
   }
+
+  // ✅ 新增：WiFi连接成功后启动NTP同步
+  DEBUG_PRINTLN("[NTP] 开始异步同步时钟...");
+  configTime(8 * 3600, 0, "ntp.aliyun.com", "time.nist.gov");
+  ntpSynced = false;
 
   // 5. 连接MQTT
   MQTTClient::setCallback(onMQTTMessage);
@@ -130,6 +166,11 @@ void setup() {
 
   // 8. 初始化Ghost检测器
   GhostDetector::init();
+
+  // ✅ 新增：9. 初始化按键处理
+  DEBUG_PRINTLN("[主程序] 初始化按键处理...");
+  setupButton();
+  DEBUG_PRINTLN("[主程序] ✅ 按键处理初始化完成");
 
   // 10. 初始化状态管理器
   StateManager::init();
@@ -158,6 +199,23 @@ void loop() {
   // 维护WiFi连接
   WiFiManager::maintain();
 
+  // ✅ 新增：检测WiFi连接状态变化
+  bool currentWifiConnected = WiFiManager::isConnected();
+  if (currentWifiConnected && !wifiWasConnected) {
+    // WiFi刚连接，启动NTP同步
+    DEBUG_PRINTLN("[NTP] WiFi已连接，启动NTP同步...");
+    configTime(8 * 3600, 0, "ntp.aliyun.com", "time.nist.gov");
+    ntpSynced = false;
+  }
+  wifiWasConnected = currentWifiConnected;
+
+  // ✅ 新增：检查NTP同步状态
+  if (wifiWasConnected && !ntpSynced && time(nullptr) > 1000000000UL) {
+    Serial.println("[NTP] 同步成功");
+    ntpSynced = true;
+    ntpLastSyncMs = millis();
+  }
+
   // 维护MQTT连接
   MQTTClient::loop();
 
@@ -174,6 +232,9 @@ void loop() {
   // 更新LED状态
   LEDIndicator::update();
 
+  // ✅ 新增：处理按键
+  processButton();
+
   // 更新传感器（定时上报）
   Sensors::update();
 
@@ -186,8 +247,18 @@ void loop() {
   // 更新Ghost检测
   GhostDetector::update();
 
-  // 短暂延时
-  delay(10);
+  // ✅ 新增：更新DisplayEngine显示引擎（仅在屏幕开启时渲染）
+  DisplayManager::getInstance().update();
+  if (screenOn) {
+    DisplayManager::getInstance().render();
+  } else {
+    // 屏幕关闭时清空显示
+    LEDMatrix::clear();
+    LEDMatrix::refresh();
+  }
+
+  // DisplayEngine自己控制帧率，这里使用短delay让出CPU
+  delay(1);
 }
 
 // ===== 红外接收回调 =====
@@ -574,6 +645,80 @@ void handleAutoDetectCommand(const char *json) {
   }
 }
 
+// ===== 创建默认显示卡片 =====
+void createDefaultCards() {
+  DEBUG_PRINTLN("[DisplayEngine] 创建默认卡片...");
+
+  // 卡片1: 矩阵雨背景+时钟前景
+  Card* matrixCard = new Card("矩阵雨");
+  MatrixRainBackground* matrixBg = new MatrixRainBackground();
+  matrixCard->setBackground(matrixBg);
+  ClockForeground* clockFg1 = new ClockForeground();
+  clockFg1->setFormat(ClockForeground::Format::HH_MM);
+  clockFg1->setPosition(Position::TOP_CENTER);
+  clockFg1->setFont(FontType::FONT_3x5);
+  clockFg1->setBrightness(200);
+  matrixCard->addForeground(clockFg1);
+  DisplayManager::getInstance().addCard(matrixCard);
+  DEBUG_PRINTLN("[DisplayEngine] 卡片1: 矩阵雨已创建");
+
+  // 卡片2: 水波纹背景（无时钟前景）
+  Card* waterCard = new Card("水波纹");
+  WaterRippleBackground* waterBg = new WaterRippleBackground();
+  waterCard->setBackground(waterBg);
+  DisplayManager::getInstance().addCard(waterCard);
+  DEBUG_PRINTLN("[DisplayEngine] 卡片2: 水波纹已创建");
+
+  // 卡片3: 生命游戏背景（无时钟前景）
+  Card* lifeCard = new Card("生命游戏");
+  GameOfLifeBackground* lifeBg = new GameOfLifeBackground();
+  lifeCard->setBackground(lifeBg);
+  DisplayManager::getInstance().addCard(lifeCard);
+  DEBUG_PRINTLN("[DisplayEngine] 卡片3: 生命游戏已创建");
+
+  // 卡片4: 火焰背景+时钟前景
+  Card* fireCard = new Card("火焰");
+  FireBackground* fireBg = new FireBackground();
+  fireCard->setBackground(fireBg);
+  ClockForeground* clockFg4 = new ClockForeground();
+  clockFg4->setFormat(ClockForeground::Format::HH_MM);
+  clockFg4->setPosition(Position::TOP_CENTER);
+  clockFg4->setFont(FontType::FONT_3x5);
+  clockFg4->setBrightness(220);
+  fireCard->addForeground(clockFg4);
+  DisplayManager::getInstance().addCard(fireCard);
+  DEBUG_PRINTLN("[DisplayEngine] 卡片4: 火焰已创建");
+
+  // 卡片5: 沙漏背景（无时钟前景）
+  Card* sandCard = new Card("沙漏");
+  SandBackground* sandBg = new SandBackground();
+  sandCard->setBackground(sandBg);
+  DisplayManager::getInstance().addCard(sandCard);
+  DEBUG_PRINTLN("[DisplayEngine] 卡片5: 沙漏已创建");
+
+  // 卡片6: Pong背景（不显示时钟）
+  Card* pongCard = new Card("Pong");
+  PongBackground* pongBg = new PongBackground();
+  pongCard->setBackground(pongBg);
+  DisplayManager::getInstance().addCard(pongCard);
+  DEBUG_PRINTLN("[DisplayEngine] 卡片6: Pong已创建");
+
+  DEBUG_PRINTF("[DisplayEngine] 共创建 %d 个默认卡片\n",
+               DisplayManager::getInstance().getCardCount());
+}
+
+// ===== 显示WiFi连接提示 =====
+void displayWiFiConnecting() {
+  // 使用FontRenderer在左上角显示"WiFi"
+  LEDMatrix::clear();
+  
+  // 在左上角显示 "WiFi" 字样
+  FontRenderer::drawString("WiFi", 0, 0, FontType::FONT_3x5, 200);
+  
+  LEDMatrix::refresh();
+  DEBUG_PRINTLN("[显示] WiFi Connecting 提示已显示");
+}
+
 // ===== 发送设备上线消息（用于设备发现）=====
 void publishDeviceAnnounce() {
   DeviceConfig &cfg = ConfigManager::getConfig();
@@ -654,3 +799,99 @@ void handleConfigBindingUpdate(const char *json) {
 
   DEBUG_PRINTLN("[绑定配置] ✅ 设备绑定完成");
 }
+
+// ✅ 新增：EasyButton 按键处理实现
+
+// 注意：全局变量 screenOn, gccValue, brtDir 已在文件开头定义
+
+// EasyButton 实例
+EasyButton btn(PIN_BUTTON, BTN_DEBOUNCE_MS, false, false);
+
+// 按键状态变量
+static bool _brtBounced = false;
+static uint32_t _brtMs = 0;
+static bool _pendingShort = false;
+static uint32_t _pendingMs = 0;
+
+void doShortPress() {
+  screenOn = !screenOn;
+  applyBrightness();
+  DEBUG_PRINTF("[按键] 短按 → 屏幕%s\n", screenOn ? "开" : "关");
+}
+
+void doDoubleClick() {
+  if (!screenOn) return;
+  DisplayManager::getInstance().nextCard();
+  Card* currentCard = DisplayManager::getInstance().getCurrentCard();
+  if (currentCard) {
+    DEBUG_PRINTF("[按键] 双击 → 切换到卡片: %s\n", currentCard->getName());
+  }
+}
+
+void doLongPressStep() {
+  if (!screenOn || _brtBounced) return;
+  int step = max(1, (int)(8.0f * sqrtf((float)gccValue / 255.0f) + 0.5f));
+  int v = (int)gccValue + brtDir * step;
+  if (v >= 255) {
+    v = 255;
+    _brtBounced = true;
+  } else if (v <= 1) {
+    v = 1;
+    _brtBounced = true;
+  }
+  gccValue = (uint8_t)v;
+  applyBrightness();
+  DEBUG_PRINTF("[按键] 长按调节 → GCC=%d(step=%d)\n", gccValue, step);
+}
+
+void applyBrightness() {
+  LEDMatrix::setGlobalBrightness(screenOn ? gccValue : 0);
+}
+
+void setupButton() {
+  btn.onPressed([]() {
+    _pendingShort = true;
+    _pendingMs = millis();
+  });
+
+  btn.onSequence(2, BTN_DOUBLE_MS, []() {
+    if (!screenOn) return;
+    _pendingShort = false;
+    doDoubleClick();
+  });
+
+  btn.onPressedFor(BTN_LONG_MS, []() {
+    _pendingShort = false;
+    if (!screenOn) return;
+    _brtBounced = false;
+    brtDir = -brtDir;
+    _brtMs = millis() - BTN_BRT_MS;
+    DEBUG_PRINTF("[按键] 长按开始 → dir=%d\n", brtDir);
+  });
+
+  btn.begin();
+  DEBUG_PRINTLN("[按键] EasyButton 初始化完成");
+}
+
+void processButton() {
+  btn.read();
+
+  // 处理短按（等待双击超时）
+  if (_pendingShort && millis() - _pendingMs >= BTN_DOUBLE_MS) {
+    _pendingShort = false;
+    doShortPress();
+  }
+
+  // 处理长按亮度调节
+  if (screenOn && btn.pressedFor(BTN_LONG_MS)) {
+    if (!_brtBounced && millis() - _brtMs >= BTN_BRT_MS) {
+      _brtMs = millis();
+      doLongPressStep();
+    }
+  }
+
+  if (btn.wasReleased()) {
+    _brtBounced = false;
+  }
+}
+

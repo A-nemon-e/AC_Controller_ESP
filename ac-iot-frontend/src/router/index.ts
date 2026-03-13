@@ -38,6 +38,50 @@ const routes: RouteRecordRaw[] = [
             },
         ],
     },
+    {
+        path: '/settings/display',
+        name: 'DisplaySettings',
+        component: () => import('@/views/DisplaySettings.vue'),
+        meta: { requiresAuth: true, title: '显示设置' },
+    },
+    {
+        path: '/settings/weather',
+        name: 'WeatherSettings',
+        component: () => import('@/views/WeatherSettings.vue'),
+        meta: { requiresAuth: true, title: '天气设置' },
+    },
+    {
+        path: '/admin',
+        component: () => import('@/views/admin/AdminLayout.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true },
+        redirect: '/admin/dashboard',
+        children: [
+            {
+                path: 'dashboard',
+                name: 'AdminDashboard',
+                component: () => import('@/views/admin/Dashboard.vue'),
+                meta: { title: '仪表盘' },
+            },
+            {
+                path: 'users',
+                name: 'UserManagement',
+                component: () => import('@/views/admin/UserManagement.vue'),
+                meta: { title: '用户管理' },
+            },
+            {
+                path: 'devices',
+                name: 'DeviceManagement',
+                component: () => import('@/views/admin/DeviceManagement.vue'),
+                meta: { title: '设备管理' },
+            },
+            {
+                path: 'ota',
+                name: 'OtaManagement',
+                component: () => import('@/views/admin/OtaManagement.vue'),
+                meta: { title: 'OTA管理' },
+            },
+        ],
+    },
 ]
 
 const router = createRouter({
@@ -46,7 +90,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
     const token = localStorage.getItem('access_token')
 
     if (to.meta.requiresAuth && !token) {

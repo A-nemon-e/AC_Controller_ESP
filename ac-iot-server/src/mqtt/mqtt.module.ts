@@ -3,8 +3,8 @@ import { MqttService } from './mqtt.service';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-    imports: [ConfigModule],
-    providers: [MqttService],
-    exports: [MqttService],
+  imports: [ConfigModule],
+  providers: [MqttService],
+  exports: [MqttService],
 })
-export class MqttModule { }
+export class MqttModule {}

@@ -8,7 +8,7 @@
 
 // 静态成员初始化
 uint8_t LEDMatrix::buffer[SCREEN_ROWS][SCREEN_COLS] = {{0}};
-IS31FL3733Driver* LEDMatrix::drivers[NUM_CHIPS] = {nullptr};
+IS31FL3733::IS31FL3733Driver* LEDMatrix::drivers[NUM_CHIPS] = {nullptr};
 bool LEDMatrix::initialized = false;
 bool LEDMatrix::screenOn = true;
 uint8_t LEDMatrix::globalBrightness = 128;
@@ -34,8 +34,8 @@ bool LEDMatrix::begin() {
     // 清空错误状态
     clearError();
 
-    // 初始化I2C总线
-    Wire.begin();
+    // 初始化I2C总线（ESP8266需要指定SDA和SCL引脚）
+    Wire.begin(PIN_SDA, PIN_SCL);
     Wire.setClock(400000);  // 400kHz快速模式
 
     // 扫描I2C设备（调试用）
@@ -63,7 +63,7 @@ bool LEDMatrix::begin() {
             default: addr1 = IS31FL3733::ADDR::GND; addr2 = IS31FL3733::ADDR::GND; break;
         }
 
-        drivers[i] = new IS31FL3733Driver(
+        drivers[i] = new IS31FL3733::IS31FL3733Driver(
             static_cast<IS31FL3733::ADDR>(addr1),
             static_cast<IS31FL3733::ADDR>(addr2),
             i2cReadReg,
@@ -72,14 +72,18 @@ bool LEDMatrix::begin() {
 
         // 初始化芯片
         drivers[i]->Init();
-        
+
         // 设置全局亮度
         drivers[i]->SetGCC(globalBrightness);
-        
+
         // 启用上拉/下拉电阻
         drivers[i]->SetSWPUR(IS31FL3733::RESISTOR::RESISTOR_1K);
         drivers[i]->SetCSPDR(IS31FL3733::RESISTOR::RESISTOR_1K);
-        
+
+        // 关键：打开LED矩阵（参考test_3733_scanner的initAllChips）
+        drivers[i]->SetLEDMatrixState(IS31FL3733::LED_STATE::ON);
+        drivers[i]->SetLEDMatrixPWM(0);
+
         // 关闭软件关断
         drivers[i]->WritePagedReg(
             IS31FL3733::PAGEDREGISTER::CR,
@@ -124,21 +128,21 @@ void LEDMatrix::end() {
     initialized = false;
 }
 
-void LEDMatrix::clear() {
+void ICACHE_FLASH_ATTR LEDMatrix::clear() {
     memset(buffer, 0, sizeof(buffer));
 }
 
-void LEDMatrix::fill(uint8_t brightness) {
+void ICACHE_FLASH_ATTR LEDMatrix::fill(uint8_t brightness) {
     memset(buffer, brightness, sizeof(buffer));
 }
 
-void LEDMatrix::fillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t brightness) {
+void ICACHE_FLASH_ATTR LEDMatrix::fillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t brightness) {
     // 边界检查
     if (x >= SCREEN_COLS || y >= SCREEN_ROWS) return;
     
     // 裁剪到屏幕范围
-    uint8_t x2 = min((uint8_t)(x + w), SCREEN_COLS);
-    uint8_t y2 = min((uint8_t)(y + h), SCREEN_ROWS);
+    uint8_t x2 = min((uint8_t)(x + w), (uint8_t)SCREEN_COLS);
+    uint8_t y2 = min((uint8_t)(y + h), (uint8_t)SCREEN_ROWS);
     
     for (uint8_t row = y; row < y2; row++) {
         for (uint8_t col = x; col < x2; col++) {
@@ -164,7 +168,7 @@ uint8_t LEDMatrix::getPixel(uint8_t x, uint8_t y) {
     return buffer[y][x];
 }
 
-bool LEDMatrix::setPixelClipped(int16_t x, int16_t y, uint8_t brightness) {
+bool ICACHE_FLASH_ATTR LEDMatrix::setPixelClipped(int16_t x, int16_t y, uint8_t brightness) {
     // 裁剪检查
     if (x < 0 || x >= SCREEN_COLS || y < 0 || y >= SCREEN_ROWS) {
         return false;
@@ -201,11 +205,11 @@ bool LEDMatrix::refresh() {
     return true;
 }
 
-void LEDMatrix::copyFrom(const uint8_t source[SCREEN_ROWS][SCREEN_COLS]) {
+void ICACHE_FLASH_ATTR LEDMatrix::copyFrom(const uint8_t source[SCREEN_ROWS][SCREEN_COLS]) {
     memcpy(buffer, source, sizeof(buffer));
 }
 
-void LEDMatrix::setGlobalBrightness(uint8_t gcc) {
+void ICACHE_FLASH_ATTR LEDMatrix::setGlobalBrightness(uint8_t gcc) {
     globalBrightness = gcc;
     
     if (!initialized) return;
@@ -222,7 +226,7 @@ void LEDMatrix::setScreenOn(bool on) {
     setGlobalBrightness(globalBrightness);
 }
 
-const char* LEDMatrix::getErrorString(LEDMatrixError error) {
+const char* ICACHE_FLASH_ATTR LEDMatrix::getErrorString(LEDMatrixError error) {
     switch (error) {
         case LEDMatrixError::NONE: return "No error";
         case LEDMatrixError::OUT_OF_BOUNDS: return "Position out of bounds";
@@ -233,7 +237,7 @@ const char* LEDMatrix::getErrorString(LEDMatrixError error) {
     }
 }
 
-void LEDMatrix::testPattern() {
+void ICACHE_FLASH_ATTR LEDMatrix::testPattern() {
     if (!initialized) return;
 
     // 逐个点亮所有LED
@@ -256,7 +260,7 @@ void LEDMatrix::testPattern() {
     refresh();
 }
 
-void LEDMatrix::scanI2C() {
+void ICACHE_FLASH_ATTR LEDMatrix::scanI2C() {
     Serial.println("[LEDMatrix] I2C Scan:");
     
     uint8_t error, address;
@@ -277,7 +281,7 @@ void LEDMatrix::scanI2C() {
     }
 }
 
-void LEDMatrix::getStats(uint32_t& frameCount, uint32_t& errorCount) {
+void ICACHE_FLASH_ATTR LEDMatrix::getStats(uint32_t& frameCount, uint32_t& errorCount) {
     frameCount = frameCounter;
     errorCount = errorCounter;
 }
@@ -295,39 +299,34 @@ bool LEDMatrix::isValidPosition(uint8_t x, uint8_t y) {
     return x < SCREEN_COLS && y < SCREEN_ROWS;
 }
 
-void LEDMatrix::bufferToPWM(uint8_t chipIndex, uint8_t* pwmBuffer) {
-    // 清零PWM缓冲区
+void ICACHE_FLASH_ATTR LEDMatrix::bufferToPWM(uint8_t chipIndex, uint8_t* pwmBuffer) {
+    // 完全参照 test_3733_scanner 的 fbRender() 实现
+    // chip0 对应右边 (列35-41), chip5 对应左边 (列0-6)
+    // sw (scan line) 对应列，但顺序反转
+    // cs (current source) 对应行
+    
     memset(pwmBuffer, 0, 192);
     
-    // 计算该芯片负责的列范围
-    // chip5: 0-6, chip4: 7-13, chip3: 14-20, chip2: 21-27, chip1: 28-34, chip0: 35-41
-    uint8_t startCol = (NUM_CHIPS - 1 - chipIndex) * 7;
-    uint8_t endCol = min((uint8_t)(startCol + 7), SCREEN_COLS);
-    
-    // 每个芯片有16列(CS)和12行(SW)，但我们只用了7列(CS0-6)和11行(SW0-10)
-    for (uint8_t row = 0; row < SCREEN_ROWS; row++) {
-        for (uint8_t col = startCol; col < endCol; col++) {
-            // 计算在芯片内的CS和SW索引
-            uint8_t cs = col - startCol;  // 0-6
-            uint8_t sw = row;             // 0-10
+    for (int8_t sw = CHIP_COLS - 1; sw >= 0; sw--) {
+        // 计算物理列位置 (参照 test_3733_scanner: physX = chip * CHIP_COLS + (CHIP_COLS - 1 - sw))
+        uint8_t physX = chipIndex * CHIP_COLS + (CHIP_COLS - 1 - sw);
+        
+        for (uint8_t cs = 0; cs < SCREEN_ROWS; cs++) {
+            // 应用全局亮度
+            uint16_t brightness = buffer[cs][physX];
+            brightness = (brightness * globalBrightness) / 255;
             
-            // IS31FL3733 PWM寄存器布局: CS x SW
-            // 寄存器地址 = cs * 12 + sw
-            uint16_t regAddr = cs * 12 + sw;
-            
-            if (regAddr < 192) {
-                // 应用全局亮度
-                uint16_t brightness = buffer[row][col];
-                brightness = (brightness * globalBrightness) / 255;
-                pwmBuffer[regAddr] = (uint8_t)brightness;
-            }
+            // PWM缓冲区布局: sw * 16 + cs (参照 test_3733_scanner)
+            pwmBuffer[sw * 16 + cs] = (uint8_t)brightness;
         }
     }
 }
 
 // I2C回调函数
+// 注意：IS31FL3733库在Arduino模式下已经将地址转换为7位（右移1位）
+// 所以这里直接使用addr，不要再右移！
 uint8_t LEDMatrix::i2cWriteReg(uint8_t addr, uint8_t reg, const uint8_t* buf, uint8_t cnt) {
-    Wire.beginTransmission(addr >> 1);  // IS31FL3733库使用8位地址，Wire使用7位
+    Wire.beginTransmission(addr);  // addr已经是7位地址
     Wire.write(reg);
     for (uint8_t i = 0; i < cnt; i++) {
         Wire.write(buf[i]);
@@ -336,13 +335,13 @@ uint8_t LEDMatrix::i2cWriteReg(uint8_t addr, uint8_t reg, const uint8_t* buf, ui
 }
 
 uint8_t LEDMatrix::i2cReadReg(uint8_t addr, uint8_t reg, uint8_t* buf, uint8_t cnt) {
-    Wire.beginTransmission(addr >> 1);
+    Wire.beginTransmission(addr);  // addr已经是7位地址
     Wire.write(reg);
     uint8_t result = Wire.endTransmission(false);
     
     if (result != 0) return result;
     
-    Wire.requestFrom((uint8_t)(addr >> 1), cnt);
+    Wire.requestFrom(addr, cnt);
     uint8_t i = 0;
     while (Wire.available() && i < cnt) {
         buf[i++] = Wire.read();

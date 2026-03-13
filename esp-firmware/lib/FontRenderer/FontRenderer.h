@@ -154,18 +154,19 @@ public:
     static bool isCharSupported(char c);
 
 private:
-    // 字体渲染模板实现
-    template<FontType FONT>
-    static uint8_t drawCharT(char c, uint8_t x, uint8_t y, uint8_t brightness);
+    // 字体渲染函数（替代模板）
+    static uint8_t drawChar3x5(char c, uint8_t x, uint8_t y, uint8_t brightness);
+    static uint8_t drawChar5x7(char c, uint8_t x, uint8_t y, uint8_t brightness);
+    static uint8_t drawChar3x9(char c, uint8_t x, uint8_t y, uint8_t brightness);
+    static uint8_t drawChar5x5(char c, uint8_t x, uint8_t y, uint8_t brightness);
+    static uint8_t drawChar6x9(char c, uint8_t x, uint8_t y, uint8_t brightness);
     
-    // 冒号渲染模板
-    template<uint8_t W, uint8_t H>
-    static void drawColonT(uint8_t x, uint8_t y, const uint8_t (&colonData)[H], uint8_t brightness);
-    
-    // 获取字体数据指针
-    static const uint8_t* getFontData(FontType font);
-    static uint8_t getFontDataWidth(FontType font);
-    static uint8_t getFontDataHeight(FontType font);
+    // 冒号渲染函数
+    static void drawColon3x5(uint8_t x, uint8_t y, uint8_t brightness);
+    static void drawColon5x7(uint8_t x, uint8_t y, uint8_t brightness);
+    static void drawColon3x9(uint8_t x, uint8_t y, uint8_t brightness);
+    static void drawColon5x5(uint8_t x, uint8_t y, uint8_t brightness);
+    static void drawColon6x9(uint8_t x, uint8_t y, uint8_t brightness);
 };
 
 #endif // FONT_RENDERER_H

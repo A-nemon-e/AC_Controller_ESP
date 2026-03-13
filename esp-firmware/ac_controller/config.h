@@ -13,9 +13,13 @@
 // ===== 硬件引脚定义 =====
 // 红外系统（保留）
 #define PIN_IR_SEND 14   // D5 - 红外发射LED
+#define PIN_IR_RECV 2    // D4 - 1838B红外接收器1 (兼容旧代码)
 #define PIN_IR_RECV_1 2  // D4 - 1838B红外接收器1 (新增)
 #define PIN_IR_RECV_2 12 // D6 - 1838B红外接收器2 (新增，原麦克风引脚)
 #define PIN_IR_RECV_3 13 // D7 - 1838B红外接收器3 (保留)
+
+// LED指示器（兼容旧代码）
+#define PIN_LED_IR 15    // D8 - 红外LED指示器（复用系统LED）
 
 // I2C总线（复用AHT20和IS31FL3733）
 #define PIN_SDA 4 // D2 - I2C数据线 (AHT20 0x38 + IS31FL3733 0x50-0x55)
@@ -29,6 +33,7 @@
 
 // 传感器（保留）
 #define PIN_ADC A0 // A0 - 电流互感器
+#define PIN_MIC 12 // D6 - 麦克风/声音检测（复用IR_RECV_2）
 
 // ===== WiFi配置（默认值，可通过SmartConfig修改）=====
 // 注意：实际的WiFi凭证会存储在EEPROM中

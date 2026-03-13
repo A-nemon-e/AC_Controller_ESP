@@ -9,11 +9,11 @@ import { RoutinesModule } from '../routines/routines.module';
 import { DevicesModule } from '../devices/devices.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Device, SensorReading, AuditLog]),
-        RoutinesModule,
-        DevicesModule,
-    ],
-    providers: [UplinkService],
+  imports: [
+    TypeOrmModule.forFeature([Device, SensorReading, AuditLog]),
+    RoutinesModule,
+    DevicesModule,
+  ],
+  providers: [UplinkService],
 })
-export class UplinkModule { }
+export class UplinkModule {}

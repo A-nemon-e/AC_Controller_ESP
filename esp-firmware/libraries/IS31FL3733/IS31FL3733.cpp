@@ -2,7 +2,7 @@
  *  Copyright (c) Neil Enns. All rights reserved.
  *  Licensed under the MIT License. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-#include "is31fl3733.hpp"
+#include "IS31FL3733.h"
 
 namespace IS31FL3733
 {

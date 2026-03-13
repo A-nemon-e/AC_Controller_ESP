@@ -1,21 +1,27 @@
-import { Entity, Column, PrimaryGeneratedColumn, OneToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  OneToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from './user.entity';
 
 @Entity()
 export class UserSettings {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column({ default: 'C' })
-    temperatureUnit: string; // 'C' | 'F'
+  @Column({ default: 'C' })
+  temperatureUnit: string; // 'C' | 'F'
 
-    @Column({ default: 'dark' })
-    theme: string; // 'dark' | 'light'
+  @Column({ default: 'dark' })
+  theme: string; // 'dark' | 'light'
 
-    @OneToOne(() => User, (user) => user.settings)
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @OneToOne(() => User, (user) => user.settings)
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column({ unique: true })
-    userId: number;
+  @Column({ unique: true })
+  userId: number;
 }

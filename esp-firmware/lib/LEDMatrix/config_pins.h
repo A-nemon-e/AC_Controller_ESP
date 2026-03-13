@@ -81,15 +81,19 @@
 // ============================================
 // EEPROM布局（与DisplayConfig配合使用）
 // ============================================
-#define EEPROM_SIZE 512             // EEPROM总大小
+// ⚠️ 重要：避开 WiFiManager 使用的区域 (0x00-0x5F)
+// WiFiManager: 0x00-0x1F (SSID, 32 bytes), 0x20-0x5F (Password, 64 bytes)
+#ifndef EEPROM_SIZE
+  #define EEPROM_SIZE 512             // EEPROM总大小（如果未定义）
+#endif
 
-// 地址定义
-#define EEPROM_MAGIC_ADDR 0x00      // 魔数 (4 bytes)
-#define EEPROM_VERSION_ADDR 0x04    // 版本 (2 bytes)
-#define EEPROM_CHECKSUM_ADDR 0x06   // 校验和 (2 bytes)
-#define EEPROM_DISPLAY_SETTINGS_ADDR 0x10  // DisplaySettings (32 bytes)
-#define EEPROM_CARD_CONFIG_ADDR 0x30       // 卡片配置预留 (32 bytes)
-#define EEPROM_USER_DATA_ADDR 0x50         // 用户数据预留 (176 bytes)
+// DisplayConfig 使用 0x100 开始的区域（256 bytes起）
+#define EEPROM_MAGIC_ADDR 0x100      // 魔数 (4 bytes)
+#define EEPROM_VERSION_ADDR 0x104    // 版本 (2 bytes)
+#define EEPROM_CHECKSUM_ADDR 0x106   // 校验和 (2 bytes)
+#define EEPROM_DISPLAY_SETTINGS_ADDR 0x110  // DisplaySettings (32 bytes)
+#define EEPROM_CARD_CONFIG_ADDR 0x130       // 卡片配置预留 (32 bytes)
+#define EEPROM_USER_DATA_ADDR 0x150         // 用户数据预留 (176 bytes)
 
 // 魔数和版本
 #define EEPROM_MAGIC 0x44495350     // "DISP" in ASCII

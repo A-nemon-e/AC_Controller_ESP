@@ -1,53 +1,73 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { User } from '../users/user.entity';
 
 @Entity()
 export class Device {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    name: string;
+  @Column()
+  name: string;
 
-    @Column({ unique: true })
-    uuid: string;
+  @Column({ unique: true })
+  uuid: string;
 
-    // Stores brand ID, capabilities mask, etc.
-    @Column({ type: 'text', nullable: true })
-    brandConfig: string;
+  @Column({ type: 'text', nullable: true })
+  brandConfig: string;
 
-    @Column('simple-json', { nullable: true })
-    irConfig: any; // Stores learned codes: { "custom_cool_26": "RAW..." }
+  @Column('simple-json', { nullable: true })
+  irConfig: any;
 
-    @Column('simple-json', { nullable: true })
-    lastState: any; // Stores synced state: { power: true, mode: 'cool', ... }
+  @Column('simple-json', { nullable: true })
+  lastState: any;
 
-    @Column('simple-json', { nullable: true })
-    micConfig: any; // Stores mic sensitivity: { enabled: true, sensitivity: 80, beepDurationMs: 500, beepType: 'short' }
+  @Column('simple-json', { nullable: true })
+  micConfig: any;
 
-    // 设备初始化状态
-    @Column({ default: 'uninitialized' })
-    setupStatus: string; // 'uninitialized' | 'brand_selected' | 'learning' | 'ready'
+  @Column({ default: 'uninitialized' })
+  setupStatus: string;
 
-    // 缓存固件支持的品牌列表 (From 'brands/list')
-    @Column('simple-json', { nullable: true })
-    supportedBrands: string[];
+  @Column('simple-json', { nullable: true })
+  supportedBrands: string[];
 
-    // 电流互感器开关
-    @Column({ default: false })
-    enableCurrent: boolean;
+  @Column({ default: false })
+  enableCurrent: boolean;
 
-    @ManyToOne(() => User, (user) => user.id)
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @ManyToOne(() => User, (user) => user.id)
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column()
-    userId: number;
+  @Column({ type: 'int', nullable: true })
+  userId: number;
 
-    // ✅ 新增：在线状态 (LWT)
-    @Column({ default: false })
-    isOnline: boolean;
+  @Column({ default: false })
+  isOnline: boolean;
 
-    @Column({ nullable: true })
-    lastSeen: Date;
+  @Column({ nullable: true })
+  lastSeen: Date;
+
+  @Column({ default: 'pending' })
+  bindStatus: 'pending' | 'bound' | 'unbound' | 'error';
+
+  @Column({ type: 'datetime', nullable: true })
+  lastBindTime: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  lastUnbindTime: Date;
+
+  @Column({ type: 'int', nullable: true })
+  boundUserId: number;
+
+  @Column({ default: false })
+  isRebindable: boolean;
+
+  @Column({ type: 'simple-json', nullable: true })
+  backupConfig: any;
 }

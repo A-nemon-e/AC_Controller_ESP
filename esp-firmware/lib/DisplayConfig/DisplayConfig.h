@@ -15,15 +15,7 @@
 #include <EEPROM.h>
 #include "../LEDMatrix/config_pins.h"
 
-// 转场效果类型
-enum class TransitionType {
-    INSTANT = 0,        // 硬切
-    FADE = 1,           // 淡入淡出
-    SLIDE_LEFT = 2,     // 向左滑动
-    SLIDE_RIGHT = 3,    // 向右滑动
-    SLIDE_UP = 4,       // 向上滑动
-    SLIDE_DOWN = 5      // 向下滑动
-};
+// 注意：TransitionType 定义在 Transition.h 中，这里不再重复定义
 
 // 显示设置数据结构（与EEPROM布局对应）
 struct DisplaySettings {
@@ -39,7 +31,7 @@ struct DisplaySettings {
         currentCard(0),
         autoSwitch(true),
         switchInterval(30),
-        transitionType(static_cast<uint8_t>(TransitionType::FADE))
+        transitionType(1)  // 1 = FADE
     {}
 };
 
@@ -87,9 +79,10 @@ public:
     
     /**
      * @brief 获取转场效果类型
+     * @return 转场效果类型 (0-5)
      */
-    static TransitionType getTransitionType() { 
-        return static_cast<TransitionType>(settings.transitionType); 
+    static uint8_t getTransitionType() { 
+        return settings.transitionType; 
     }
     
     // ==================== 设置配置 ====================
@@ -126,9 +119,9 @@ public:
     
     /**
      * @brief 设置转场效果
-     * @param type 转场类型
+     * @param type 转场类型 (0-5)
      */
-    static void setTransitionType(TransitionType type);
+    static void setTransitionType(uint8_t type);
     
     // ==================== 持久化 ====================
     

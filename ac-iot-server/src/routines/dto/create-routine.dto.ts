@@ -1,24 +1,31 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsBoolean,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateRoutineDto {
-    @IsString()
-    @IsNotEmpty()
-    name: string;
+  @IsString()
+  @IsNotEmpty()
+  name: string;
 
-    @IsBoolean()
-    @IsOptional()
-    enabled?: boolean;
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
 
-    @IsString()
-    @IsOptional()
-    cron?: string;
+  @IsString()
+  @IsOptional()
+  cron?: string;
 
-    @IsArray()
-    @IsOptional()
-    triggers?: any[];
+  @IsArray()
+  @IsOptional()
+  triggers?: any[];
 
-    @IsArray()
-    @IsNotEmpty()
-    actions: any[];
+  @IsArray()
+  @IsNotEmpty()
+  actions: any[];
 }

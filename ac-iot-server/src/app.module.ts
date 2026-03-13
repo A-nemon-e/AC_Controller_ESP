@@ -1,4 +1,9 @@
-import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
+import {
+  Module,
+  NestModule,
+  MiddlewareConsumer,
+  RequestMethod,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -10,6 +15,7 @@ import { UsersModule } from './users/users.module';
 import { User } from './users/user.entity';
 import { UserSettings } from './users/user-settings.entity';
 import { Device } from './devices/device.entity';
+import { DeviceBinding } from './devices/device-binding.entity';
 import { Routine } from './routines/routine.entity';
 import { AuditLog } from './devices/audit-log.entity';
 import { SensorReading } from './devices/sensor-reading.entity';
@@ -17,15 +23,25 @@ import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { RoutinesModule } from './routines/routines.module';
 import { UplinkModule } from './uplink/uplink.module';
+import { AgreementModule } from './agreement/agreement.module';
+import { AdminModule } from './admin/admin.module';
+import { WeatherModule } from './weather/weather.module';
+import { UserAgreement } from './agreement/user-agreement.entity';
+import { UserAgreementAcceptance } from './agreement/user-agreement-acceptance.entity';
+import { PasswordHistory } from './auth/password-history.entity';
+import { ActivityLog } from './admin/activity-log.entity';
+import { WeatherCache } from './weather/entities/weather-cache.entity';
+import { Location } from './weather/entities/location.entity';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: process.env.NODE_ENV === 'production'
-        ? ['.env.production', '.env']
-        : ['.env.development', '.env'],
+      envFilePath:
+        process.env.NODE_ENV === 'production'
+          ? ['.env.production', '.env']
+          : ['.env.development', '.env'],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -39,7 +55,21 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
           return {
             type: 'sqlite',
             database: './fallback.db',
-            entities: [User, UserSettings, Device, Routine, AuditLog, SensorReading],
+            entities: [
+              User,
+              UserSettings,
+              Device,
+              DeviceBinding,
+              Routine,
+              AuditLog,
+              SensorReading,
+              UserAgreement,
+              UserAgreementAcceptance,
+              PasswordHistory,
+              ActivityLog,
+              WeatherCache,
+              Location,
+            ],
             synchronize: true,
           };
         }
@@ -48,8 +78,22 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
         return {
           type: 'sqlite',
           database: dbFile,
-          entities: [User, UserSettings, Device, Routine, AuditLog, SensorReading],
-          synchronize: true, // Only for dev!
+          entities: [
+            User,
+            UserSettings,
+            Device,
+            DeviceBinding,
+            Routine,
+            AuditLog,
+            SensorReading,
+            UserAgreement,
+            UserAgreementAcceptance,
+            PasswordHistory,
+            ActivityLog,
+            WeatherCache,
+            Location,
+          ],
+          synchronize: true,
         };
       },
     }),
@@ -59,6 +103,9 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
     DevicesModule,
     RoutinesModule,
     UplinkModule,
+    AgreementModule,
+    AdminModule,
+    WeatherModule,
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
   ],

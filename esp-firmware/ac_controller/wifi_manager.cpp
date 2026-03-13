@@ -196,6 +196,14 @@ bool WiFiManager::loadCredentials(String &ssid, String &password) {
       break;
   }
   ssid = String(ssidBuf);
+  
+  // 调试输出：显示读取到的原始数据
+  DEBUG_PRINT("[WiFi] EEPROM原始数据: ");
+  for (int i = 0; i < 16; i++) {
+    DEBUG_PRINTF("%02X ", (uint8_t)EEPROM.read(EEPROM_WIFI_SSID + i));
+  }
+  DEBUG_PRINTLN();
+  DEBUG_PRINTF("[WiFi] 读取到的SSID: '%s' (长度: %d)\n", ssid.c_str(), ssid.length());
 
   // 读取密码
   char passBuf[65] = {0};
@@ -215,6 +223,22 @@ bool WiFiManager::loadCredentials(String &ssid, String &password) {
   // 检查是否全由 0xFF 组成（即空EEPROM）
   if (ssid[0] == (char)0xFF)
     return false;
+
+  // 检查SSID是否只包含可打印字符
+  for (size_t i = 0; i < ssid.length(); i++) {
+    char c = ssid[i];
+    // 只允许字母、数字、空格和常见符号
+    if (!((c >= 32 && c <= 126) || c == 0)) {
+      DEBUG_PRINTF("[WiFi] SSID包含非法字符: [%02X] at pos %d\n", (uint8_t)c, i);
+      return false;
+    }
+  }
+
+  // 检查是否包含明显错误的模式（如"PSID"）
+  if (ssid.startsWith("PSID") || ssid.startsWith("SSID")) {
+    DEBUG_PRINTLN("[WiFi] 检测到可能的EEPROM数据损坏（PSID/SSID模式）");
+    return false;
+  }
 
   return true;
 }

@@ -59,3 +59,29 @@ export interface Brand {
     name: string
     models: number[]
 }
+
+export interface CreateDeviceDto {
+    uuid: string
+    name: string
+    mac?: string
+    brandId?: string
+    model?: number
+}
+
+export interface DisplayConfig {
+    enableCurrent: boolean
+    tempUnit: 'C' | 'F'
+    beepDetection: {
+        enabled: boolean
+        openDuration: number
+        closeDuration: number
+        detectionWindow: number
+        noiseFilter: boolean
+        minInterval: number
+    }
+}
+
+export interface CommandPayload {
+    type: string
+    payload?: Record<string, any>
+}
