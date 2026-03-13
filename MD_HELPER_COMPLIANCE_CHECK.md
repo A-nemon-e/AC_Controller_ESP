@@ -28,7 +28,7 @@ AC_Controller_ESP/
 | **@architect** | 分散在各模块docs/ | ✅ 符合 |
 | **@explorer** | `CODE_ANALYSIS.md` (根目录) | ✅ 符合 |
 | **@plan** | `esp-firmware/docs/PHASE[1-2]_DESIGN.md`<br>`ac-iot-server/docs/PHASE[3-4]_DESIGN.md`<br>`ac-iot-frontend/docs/PHASE5_DESIGN.md` | ✅ 符合 |
-| **@build** | `esp-firmware/lib/` (30个代码文件)<br>`ac-iot-server/src/`<br>`ac-iot-frontend/src/` | ✅ 符合 |
+| **@build** | `~/Arduino/libraries/` (ESP库文件)<br>`ac-iot-server/src/`<br>`ac-iot-frontend/src/` | ✅ 符合 |
 | **@reviewer** | `CODE_REVIEW_[ESP/BACKEND/FRONTEND].md`<br>`INTEGRATION_TEST_REPORT.md`<br>`P[0-2]_FIXES_REPORT.md` | ✅ 符合 |
 
 **结论**: ✅ 文档结构完全符合 MD Helper 要求

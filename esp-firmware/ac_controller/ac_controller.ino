@@ -196,6 +196,24 @@ void setup() {
 
 // ===== 主循环 =====
 void loop() {
+  // ✅ 高优先级：渲染显示（确保固定帧率）
+  // 使用非阻塞方式确保60fps（16ms间隔）
+  static uint32_t lastRenderMs = 0;
+  uint32_t now = millis();
+  if (now - lastRenderMs >= 16) {
+    lastRenderMs = now;
+    
+    // 更新DisplayEngine显示引擎
+    DisplayManager::getInstance().update();
+    if (screenOn) {
+      DisplayManager::getInstance().render();
+    } else {
+      // 屏幕关闭时清空显示
+      LEDMatrix::clear();
+      LEDMatrix::refresh();
+    }
+  }
+
   // 维护WiFi连接
   WiFiManager::maintain();
 
@@ -247,17 +265,7 @@ void loop() {
   // 更新Ghost检测
   GhostDetector::update();
 
-  // ✅ 新增：更新DisplayEngine显示引擎（仅在屏幕开启时渲染）
-  DisplayManager::getInstance().update();
-  if (screenOn) {
-    DisplayManager::getInstance().render();
-  } else {
-    // 屏幕关闭时清空显示
-    LEDMatrix::clear();
-    LEDMatrix::refresh();
-  }
-
-  // DisplayEngine自己控制帧率，这里使用短delay让出CPU
+  // 短暂延时让出CPU，避免看门狗复位
   delay(1);
 }
 

@@ -14,7 +14,7 @@
 
 ### 1.2 文件清单
 ```
-esp-firmware/libraries/
+~/Arduino/libraries/
 ├── IS31FL3733/
 │   ├── IS31FL3733.h           ✅ 复制自test_3733_scanner
 │   └── IS31FL3733.cpp         ✅
@@ -41,10 +41,11 @@ esp-firmware/libraries/
 ### 2.1 测试命令
 ```bash
 arduino-cli compile \
-  --libraries AC_Controller_ESP/esp-firmware/libraries \
   --fqbn esp8266:esp8266:nodemcuv2 \
   AC_Controller_ESP/esp-firmware/test_phase1
 ```
+
+**注意**: 库文件位于 `~/Arduino/libraries/`，Arduino CLI 会自动搜索此目录。
 
 ### 2.2 结果汇总 ✅ 编译成功
 
@@ -194,9 +195,8 @@ void loop() {
 
 ### 6.2 运行测试
 ```bash
-# 编译
+# 编译（库文件位于 ~/Arduino/libraries/）
 arduino-cli compile \
-  --libraries AC_Controller_ESP/esp-firmware/libraries \
   --fqbn esp8266:esp8266:nodemcuv2 \
   AC_Controller_ESP/esp-firmware/test_phase1
 

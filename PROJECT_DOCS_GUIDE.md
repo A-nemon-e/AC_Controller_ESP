@@ -578,13 +578,13 @@ AC_Controller_ESP/
 
 | 功能 | 主要文件 | 状态 |
 |------|---------|------|
-| **LED驱动** | `esp-firmware/lib/IS31FL3733/` | ✅ 完成 |
-| **LED矩阵** | `esp-firmware/lib/LEDMatrix/` | ✅ 完成 |
-| **字体渲染** | `esp-firmware/lib/FontRenderer/` | ✅ 完成 |
-| **显示配置** | `esp-firmware/lib/DisplayConfig/` | ✅ 完成 |
-| **显示引擎** | `esp-firmware/lib/DisplayEngine/Core/` | ⚠️ 框架完成 |
-| **天气模块** | `esp-firmware/lib/WeatherModule/` | ⚠️ 80%完成 |
-| **按键处理** | `esp-firmware/lib/ButtonHandler/` | ❌ 待创建 |
+| **LED驱动** | `~/Arduino/libraries/IS31FL3733/` | ✅ 完成 |
+| **LED矩阵** | `~/Arduino/libraries/LEDMatrix/` | ✅ 完成 |
+| **字体渲染** | `~/Arduino/libraries/FontRenderer/` | ✅ 完成 |
+| **显示配置** | `~/Arduino/libraries/DisplayConfig/` | ✅ 完成 |
+| **显示引擎** | `~/Arduino/libraries/DisplayEngine/Core/` | ⚠️ 框架完成 |
+| **天气模块** | `~/Arduino/libraries/WeatherModule/` | ⚠️ 80%完成 |
+| **按键处理** | `~/Arduino/libraries/ButtonHandler/` | ❌ 待创建 |
 | **天气服务** | `ac-iot-server/src/weather/` | ⚠️ 80%完成 |
 | **设备绑定** | `ac-iot-server/src/devices/device-binding.service.ts` | ✅ 完成 |
 | **管理后台** | `ac-iot-server/src/admin/` | ⚠️ 70%完成 |

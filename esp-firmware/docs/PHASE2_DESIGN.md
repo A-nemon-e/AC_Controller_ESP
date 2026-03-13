@@ -136,7 +136,7 @@
 ### 3.1 模块划分
 
 ```
-lib/DisplayEngine/
+~/Arduino/libraries/DisplayEngine/
 ├── Core/
 │   ├── DisplayManager.h/.cpp      # 显示管理器
 │   ├── Card.h/.cpp                # 卡片类
