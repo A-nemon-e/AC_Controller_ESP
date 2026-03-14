@@ -44,6 +44,9 @@
 #include <DisplayEngine.h>
 #include <DisplayConfig.h>
 
+// ✅ 新增：非阻塞显示调度器（放在DisplayEngine之后）
+#include <Core/DisplayTaskScheduler.h>
+
 // ===== 全局变量定义 =====
 // 定时器配置（可通过MQTT动态修改）
 uint32_t sensorInterval = DEFAULT_SENSOR_INTERVAL;
@@ -123,7 +126,22 @@ void setup() {
   LEDMatrix::setGlobalBrightness(gccValue);
   DEBUG_PRINTLN("[主程序] ✅ 初始亮度设置完成");
 
-  // 3.9 显示WiFi连接提示（在阻塞连接前显示）
+  // 3.9 启动非阻塞显示调度器（60Hz）
+  DEBUG_PRINTLN("[主程序] 启动显示调度器...");
+  DisplayTaskScheduler::getInstance().begin();
+  DisplayTaskScheduler::getInstance().setRenderCallback([]() {
+    // 在 Ticker 回调中执行渲染
+    DisplayManager::getInstance().update();
+    if (screenOn) {
+      DisplayManager::getInstance().render();
+    } else {
+      LEDMatrix::clear();
+      LEDMatrix::refresh();
+    }
+  });
+  DEBUG_PRINTLN("[主程序] ✅ 显示调度器已启动 (60Hz)");
+
+  // 3.10 显示WiFi连接提示（在阻塞连接前显示）
   DEBUG_PRINTLN("[主程序] 显示WiFi连接提示...");
   displayWiFiConnecting();
 
@@ -196,23 +214,9 @@ void setup() {
 
 // ===== 主循环 =====
 void loop() {
-  // ✅ 高优先级：渲染显示（确保固定帧率）
-  // 使用非阻塞方式确保60fps（16ms间隔）
-  static uint32_t lastRenderMs = 0;
-  uint32_t now = millis();
-  if (now - lastRenderMs >= 16) {
-    lastRenderMs = now;
-    
-    // 更新DisplayEngine显示引擎
-    DisplayManager::getInstance().update();
-    if (screenOn) {
-      DisplayManager::getInstance().render();
-    } else {
-      // 屏幕关闭时清空显示
-      LEDMatrix::clear();
-      LEDMatrix::refresh();
-    }
-  }
+  // 注意：渲染现在由 DisplayTaskScheduler (Ticker) 自动调度
+  // 在 60Hz 频率下独立于主循环执行
+  // 主循环只处理业务逻辑，不阻塞显示
 
   // 维护WiFi连接
   WiFiManager::maintain();
