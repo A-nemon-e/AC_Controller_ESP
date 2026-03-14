@@ -214,9 +214,9 @@ void setup() {
 
 // ===== 主循环 =====
 void loop() {
-  // 注意：渲染现在由 DisplayTaskScheduler (Ticker) 自动调度
-  // 在 60Hz 频率下独立于主循环执行
-  // 主循环只处理业务逻辑，不阻塞显示
+  // ✅ 高优先级：检查并执行渲染（由 Ticker ISR 触发）
+  // 这样渲染固定在 60fps，同时主循环保持高频率运行
+  DisplayTaskScheduler::getInstance().update();
 
   // 维护WiFi连接
   WiFiManager::maintain();
