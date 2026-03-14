@@ -269,8 +269,9 @@ void loop() {
   // 更新Ghost检测
   GhostDetector::update();
 
-  // 短暂延时让出CPU，避免看门狗复位
-  delay(1);
+  // 让出CPU，避免看门狗复位
+  // 使用 delay(0) 比 delay(1) 更频繁地让出时间，减少卡顿
+  delay(0);
 }
 
 // ===== 红外接收回调 =====
